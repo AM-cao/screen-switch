@@ -103,7 +103,7 @@ namespace ScreenSwitch
             timer.Start();
 
             // 还没设置过（主屏标识还是占位符）：先提示运行设置，别去提保存布局
-            if (cfg.MainEdid == Config.Placeholder) Notify("还没有设置", "请运行 ScreenSwitchCli.exe setup");
+            if (cfg.MainEdid == Config.Placeholder) form.BeginInvoke(new Action(OpenWizard));
             else if (!layout.HasSnapshot)
             {
                 if (orch.Owned)
@@ -289,8 +289,20 @@ namespace ScreenSwitch
         }
         public IList<string> HotkeyProblems { get { return new List<string>(hotkeyProblems); } }
 
-        // 首次启动向导在下一个任务里实现；先打开设置窗口的"通用"页
-        void OpenWizard() { OpenSettings(SettingsForm.TabGeneral); }
+        WizardForm wizard;
+
+        // 只开一个向导窗口；已开着就带到前面。向导点"完成"后写配置并进程内重载
+        public void OpenWizard()
+        {
+            if (wizard == null || wizard.IsDisposed)
+            {
+                var svc = new SettingsService(dir, new SetupEnv(dir), Autostart.ForCurrentUser(dir));
+                svc.Reload = delegate { ReloadWhenIdle(); };
+                wizard = new WizardForm(svc);
+                wizard.Show();
+            }
+            wizard.Activate();
+        }
 
         public class HotkeyBinding
         {

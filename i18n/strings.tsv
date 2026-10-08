@@ -119,3 +119,27 @@ notify.log-failed	打开日志失败	Could not open the log
 notify.config-kept	配置文件有误，改动没有生效	config.json has an error; the change was not applied
 notify.save-layout-first	请先在双屏状态下保存布局	Save the layout while both screens are on
 notify.save-layout-first.text	右键托盘图标，打开“设置…”，在“屏幕”页点“现在记住当前排列”。	Right-click the tray icon, open Settings…, and click "Remember the current arrangement now" on the Screens page.
+wizard.title	ScreenSwitch 设置向导	ScreenSwitch Setup
+wizard.back	上一步	Back
+wizard.next	下一步	Next
+wizard.finish	完成	Finish
+wizard.skip	跳过	Skip
+wizard.welcome.title	欢迎使用 ScreenSwitch	Welcome to ScreenSwitch
+wizard.welcome.text	一块显示器接两台电脑时，它帮你一键切换显示器的输入源，两台电脑的桌面自动跟着调整。	When one monitor is shared by two computers, ScreenSwitch switches its input in one click and both desktops follow along.
+wizard.welcome.before	开始前，请用显示器上的按钮把主屏切到这台电脑。	Before you start, use the monitor's button to switch the main screen to this computer.
+wizard.main.title	主屏	Main screen
+wizard.main.detecting	正在检测显示器…	Detecting displays…
+wizard.main.ddc-yes	能控制	can be controlled
+wizard.main.ddc-no	不能控制	cannot be controlled
+wizard.main.pick	几块显示器都能控制，请点选主屏（两台电脑共用的那块）。	Several displays can be controlled; click the main screen (the one shared by both computers).
+wizard.main.self	这台电脑接在 {0}。	This computer uses {0}.
+wizard.main.other	主屏切走时，桌面放到 {0} 上。	When the main screen is switched away, the desktop moves to {0}.
+wizard.main.only	这台电脑只有主屏。	This computer has only the main screen.
+wizard.ports.title	输入口	Inputs
+wizard.ports.text	主屏的每个输入口接的是什么？	What is connected to each input of the main screen?
+wizard.peer.title	对方电脑	Other computer
+wizard.peer.text	另一台也接在这块主屏上的电脑（可以跳过）。	The other computer connected to this main screen (you can skip this).
+wizard.done.title	完成	Done
+wizard.done.text	点“完成”后保存设置并开始工作。以后可以在右键菜单的“设置…”里修改。	Click Finish to save and start. You can change everything later under Settings… in the menu.
+wizard.summary	主屏 {0}；这台电脑接在 {1}；{2}；对方电脑：{3}；设备：{4}	Main screen {0}; this computer uses {1}; {2}; other computer: {3}; devices: {4}
+wizard.summary.none	无	none
