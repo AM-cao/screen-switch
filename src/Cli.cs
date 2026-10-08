@@ -172,6 +172,9 @@ namespace ScreenSwitch
                         Console.WriteLine("icons written to " + args[1]);
                         return 0;
                     }
+                case "ui-dump":
+                    if (args.Length < 2 || args.Length > 3) return 1;
+                    return UiDump.Run(args[1], args.Length == 3 ? args[2] : Tr.Lang);
                 case "diag":
                     {
                         var cfg = Config.Load(Paths.Config);
@@ -281,6 +284,7 @@ namespace ScreenSwitch
             "  layout-take                       apply the snapshot (extended, both screens)\r\n" +
             "  layout-take-main                  main screen only (secondary off)\r\n" +
             "  layout-release                    clone the secondary's desktop onto both screens\r\n" +
-            "  icon-dump <dir>                   write the tray icons as PNG files";
+            "  icon-dump <dir>                   write the tray icons as PNG files\r\n" +
+            "  ui-dump <dir> [zh|en]             draw the menu, settings and wizard to PNG files (demo data)";
     }
 }
