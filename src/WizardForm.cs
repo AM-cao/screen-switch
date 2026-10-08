@@ -48,6 +48,13 @@ namespace ScreenSwitch
                 Tr.T("wizard.summary.devices", devs.Count == 0 ? none : string.Join(Tr.T("list.sep"), devs.ToArray())) });
         }
 
+        // 主屏页点了列表第 index 行：返回那一行记下的设备路径；越界、或那一行不应答 DDC/CI（null）时返回 null
+        public static string PickedMonitor(List<string> rowIds, int index)
+        {
+            if (rowIds == null || index < 0 || index >= rowIds.Count) return null;
+            return rowIds[index];
+        }
+
         // config.json 的"版本"：最后写入时间；文件不在为 DateTime.MinValue。向导打开时记下，点"完成"时比对。
         public static DateTime ConfigStamp(string path)
         {
@@ -70,8 +77,8 @@ namespace ScreenSwitch
         DetectResult detected;
         // 现有 config.json 读不了时的原因（读得了为 null）；点"完成"时旧文件会另存为 .bak
         readonly string brokenReason;
-        // 打开向导时 config.json 的最后写入时间：点"完成"时文件已经变了（命令行、AI 助手改过）要先问
-        readonly DateTime configStamp;
+        // 打开向导时（或向导自己上次写入后）config.json 的最后写入时间：点"完成"时文件已经变了（命令行、AI 助手改过）要先问
+        DateTime configStamp;
         readonly PortTable portTable = new PortTable();
         readonly PeerPanel peerPanel = new PeerPanel();
         readonly CheckBox autostart = new CheckBox { AutoSize = true, Checked = true };
@@ -153,7 +160,10 @@ namespace ScreenSwitch
                     Close();
                     return;
                 }
-                err = svc.SaveWizard(work, autostart.Checked);
+                bool written;
+                err = svc.SaveWizard(work, autostart.Checked, out written);
+                // 配置写成了（开机自动运行可能没设上）：记下新的文件时间，再点"完成"时不误问"被修改过"
+                if (written) configStamp = WizardLogic.ConfigStamp(svc.ConfigPath);
                 if (err == null)
                 {
                     if (Finished != null) Finished();
@@ -201,6 +211,8 @@ namespace ScreenSwitch
         }
 
         readonly ListBox monitorList = new ListBox { Width = 560, Height = 110 };
+        // 与 monitorList 的行一一对应：那一行显示器的完整设备路径；不应答 DDC/CI 的行为 null（不能作主屏）
+        readonly List<string> monitorIds = new List<string>();
         readonly Label mainInfo = Ui.Line("");
 
         Control MainPage()
@@ -211,10 +223,11 @@ namespace ScreenSwitch
             col.Controls.Add(Ui.Button(Tr.T("ports.detect"), delegate { StartDetect(null); }));
             monitorList.SelectedIndexChanged += delegate
             {
-                if (detected == null || detected.Candidates.Count < 2 || monitorList.SelectedIndex < 0) return;
-                SetupMonitor m = detected.Monitors[monitorList.SelectedIndex];
-                // 按完整设备路径：同型号的两块，点哪块就是哪块
-                if (m.Ddc) StartDetect(m.DeviceId);
+                if (detected == null || detected.Candidates.Count < 2) return;
+                // 按列表那一行记下的完整设备路径（同型号的两块，点哪块就是哪块），不按重新探测后的 detected
+                // ——那里的顺序和块数可能已经变了
+                string id = WizardLogic.PickedMonitor(monitorIds, monitorList.SelectedIndex);
+                if (id != null) StartDetect(id);
             };
             return col;
         }
@@ -228,11 +241,16 @@ namespace ScreenSwitch
                 detected = r;
                 if (model == null)
                 {
+                    // 先清掉行标识再清列表：清列表会触发 SelectedIndexChanged
+                    monitorIds.Clear();
                     monitorList.Items.Clear();
                     var ids = new List<string>();
                     foreach (SetupMonitor m in r.Monitors) ids.Add(m.DeviceId);
                     foreach (SetupMonitor m in r.Monitors)
+                    {
+                        monitorIds.Add(m.Ddc ? m.DeviceId : null);
                         monitorList.Items.Add(Setup.MainEdidFor(m.DeviceId, ids) + "  " + m.Name + "  —  " + (m.Ddc ? Tr.T("wizard.main.ddc-yes") : Tr.T("wizard.main.ddc-no")));
+                    }
                 }
                 if (r.Error != null)
                 {

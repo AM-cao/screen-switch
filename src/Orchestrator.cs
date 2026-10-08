@@ -19,6 +19,11 @@ namespace ScreenSwitch
         public bool Owned;
         // 读失败不让出的宽限截止时间（StateFile.Now() 的秒）；没有宽限为 0
         public long GraceUntil;
+        // 布局失败后的自愈状态（见 Orchestrator.SelfHeal）：重新加载不重置，否则失败后 10 秒内重新加载
+        // （例如 UAC 提示框期间改了设置）会让拓扑一直错到下一次切换
+        public bool LayoutFailed;
+        public long LayoutFailAt;
+        public bool RetryDeferred;
     }
 
     public class Orchestrator
@@ -70,7 +75,7 @@ namespace ScreenSwitch
         {
         }
 
-        // handover 不为 null：重新加载配置，接手旧编排器的归属和宽限期——不读 DDC（切换刚结束时显示器可能还在
+        // handover 不为 null：重新加载配置，接手旧编排器的归属、宽限期和布局自愈状态（失败记录照旧按 10 秒重试）——不读 DDC（切换刚结束时显示器可能还在
         // 重新同步，一次读数不可靠），也不做启动对账（否则可能先让出、一秒后又拿回，afterTake 再跑一遍）。
         // handover 为 null：启动，读一次 DDC 定归属并对账。
         public Orchestrator(IDdc ddc, ILayout layout, IRelay relay, INotifier notifier, IClock clock, Config cfg, Log log, string dir, OwnershipHandover handover)
@@ -83,7 +88,13 @@ namespace ScreenSwitch
             directRecord = new DirectRecord(dir);
             pollDivisor = Math.Max(1, cfg.PollMs / 500);
             bool ok = handover != null ? handover.Owned : Read();
-            if (handover != null) graceUntil = handover.GraceUntil;
+            if (handover != null)
+            {
+                graceUntil = handover.GraceUntil;
+                layoutFailed = handover.LayoutFailed;
+                layoutFailAt = handover.LayoutFailAt;
+                retryDeferred = handover.RetryDeferred;
+            }
             tracker = new OwnershipTracker(cfg.Debounce, ok);
             WriteState();
             log.Info((handover != null ? "orchestrator reloaded, owned=" : "orchestrator start, owned=") + ok);
@@ -92,12 +103,15 @@ namespace ScreenSwitch
             if (handover == null) Reconcile(ok);
         }
 
-        // 当前的归属和宽限期，交给重新加载后的新编排器。在界面线程上、不在切换中时调用（托盘程序的重新加载）。
+        // 当前的归属、宽限期和布局自愈状态，交给重新加载后的新编排器。在界面线程上、不在切换中时调用（托盘程序的重新加载）。
         public OwnershipHandover Handover()
         {
             var h = new OwnershipHandover();
             h.Owned = tracker.Owned;
             h.GraceUntil = Interlocked.Read(ref graceUntil);
+            h.LayoutFailed = layoutFailed;
+            h.LayoutFailAt = Interlocked.Read(ref layoutFailAt);
+            h.RetryDeferred = retryDeferred;
             return h;
         }
 

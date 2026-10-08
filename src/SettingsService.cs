@@ -339,6 +339,14 @@ namespace ScreenSwitch
 
         public string SaveWizard(Config c, bool autostartOn)
         {
+            bool written;
+            return SaveWizard(c, autostartOn, out written);
+        }
+
+        // written：config.json 写成了没有（开机自动运行没设上时也是 true）。向导据此更新记下的文件时间。
+        public string SaveWizard(Config c, bool autostartOn, out bool written)
+        {
+            written = false;
             try
             {
                 // 现有的 config.json 读不了：先留一份 config.json.bak（盖掉旧的 .bak），再写新的
@@ -347,6 +355,7 @@ namespace ScreenSwitch
                 c.Save(ConfigPath);
             }
             catch (Exception e) { return e.Message; }
+            written = true;
             ClearDirectRecord();
             string err = SetAutostart(autostartOn);
             if (Reload != null) Reload();

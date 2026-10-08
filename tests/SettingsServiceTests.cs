@@ -357,6 +357,32 @@ namespace ScreenSwitch.Tests
             Directory.Delete(d, true);
         }
 
+        // 配置写成了、开机自动运行没设上：告诉向导配置已经写了（它据此更新记下的文件时间，再点"完成"不误问
+        // "向导打开期间被修改过"）；配置本身没写成时 written 为 false
+        public static void Test_SaveWizard_ReportsWrittenWhenAutostartFails()
+        {
+            string d = TempDir();
+            File.WriteAllText(Path.Combine(d, "Startup"), "a file where the startup folder should be");
+            var s = new SettingsService(d, new FakeSetupEnv(), new Autostart(Path.Combine(d, "Startup"), Path.Combine(d, "ScreenSwitch.exe"), d));
+            s.Reload = null;
+            var c = new Config(); c.MainEdid = "ABC1234"; c.SelfCode = 16;
+            bool written;
+            string err = s.SaveWizard(c, true, out written);
+            Assert.True(err != null, "autostart failed");
+            Assert.Eq(true, written, "config was written");
+            Assert.Eq("ABC1234", Config.Load(Path.Combine(d, "config.json")).MainEdid, "config on disk");
+
+            string d2 = TempDir();
+            Directory.CreateDirectory(Path.Combine(d2, "config.json")); // 写不了
+            var s2 = new SettingsService(d2, new FakeSetupEnv(), new Autostart(Path.Combine(d2, "S"), "x", d2));
+            s2.Reload = null;
+            err = s2.SaveWizard(c, false, out written);
+            Assert.True(err != null, "write failed");
+            Assert.Eq(false, written, "not written");
+            Directory.Delete(d, true);
+            Directory.Delete(d2, true);
+        }
+
         public static void Test_SaveWizard_BacksUpUnreadableConfig()
         {
             string d = TempDir(); int r;

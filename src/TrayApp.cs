@@ -139,7 +139,7 @@ namespace ScreenSwitch
             var ddc = new DxvaDdc(newCfg.MainEdid, log);
             ILayout newLayout = Layouts.Create(newCfg, Path.Combine(dir, "layout-owned.bin"), log);
             var relay = new SshRelay(newCfg, log, dir);
-            // 重新加载：接手旧编排器的归属和宽限期，不重新读 DDC、不对账（切换刚结束时一次读数不可靠）。
+            // 重新加载：接手旧编排器的归属、宽限期和布局失败重试状态，不重新读 DDC、不对账（切换刚结束时一次读数不可靠）。
             // 主屏或本机编码改了（向导、detect）时旧的归属说的是另一回事：照启动那样重新读。
             OwnershipHandover handover = null;
             if (!initial && orch != null && newCfg.MainEdid == cfg.MainEdid && newCfg.SelfCode == cfg.SelfCode) handover = orch.Handover();

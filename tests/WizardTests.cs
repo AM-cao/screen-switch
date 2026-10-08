@@ -53,6 +53,18 @@ namespace ScreenSwitch.Tests
         }
 
         // 向导打开期间 config.json 被改过：点"完成"前要能看出来（不在、写过、又写过都算变了）
+        // 主屏页点列表：按那一行记下的设备路径，越界和不应答 DDC/CI 的行不理会
+        public static void Test_PickedMonitor_ByRowId()
+        {
+            var rows = new System.Collections.Generic.List<string> { "\\\\?\\DISPLAY#AAA1111#1", null, "\\\\?\\DISPLAY#AAA1111#2" };
+            Assert.Eq("\\\\?\\DISPLAY#AAA1111#2", WizardLogic.PickedMonitor(rows, 2), "row 2's own id");
+            Assert.Eq(null, WizardLogic.PickedMonitor(rows, 1), "no DDC on that row");
+            Assert.Eq(null, WizardLogic.PickedMonitor(rows, 3), "out of range");
+            Assert.Eq(null, WizardLogic.PickedMonitor(rows, -1), "nothing selected");
+            Assert.Eq(null, WizardLogic.PickedMonitor(new System.Collections.Generic.List<string>(), 0), "list cleared");
+            Assert.Eq(null, WizardLogic.PickedMonitor(null, 0), "no list");
+        }
+
         public static void Test_ConfigStamp_SeesChanges()
         {
             string d = SettingsServiceTests.TempDir();

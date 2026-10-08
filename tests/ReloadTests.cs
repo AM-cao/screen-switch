@@ -84,5 +84,42 @@ namespace ScreenSwitch.Tests
             Assert.Eq("release", layout.Calls[0], "layout release");
             Directory.Delete(d, true);
         }
+
+        // 布局失败的自愈状态跟着交接：拿回失败（例如 UAC 提示框期间）后 10 秒内重新加载，新编排器照常在
+        // 失败 10 秒后重试拿回，不必等到下一次切换。
+        public static void Test_Handover_KeepsLayoutRetry()
+        {
+            string d = Path.Combine(Path.GetTempPath(), "ss-" + Guid.NewGuid());
+            Directory.CreateDirectory(d);
+            var clock = new FakeClock();
+            var ddc = new FakeDdc(); ddc.DefaultRead = true;
+            var oldLayout = new FakeLayout(); oldLayout.ModeValue = LayoutMode.Clone; oldLayout.ThrowOnTake = true;
+            var oldOrch = Reloaded(ddc, oldLayout, clock, d, null); // 启动对账拿回，失败
+            Assert.Eq("take", string.Join(",", oldLayout.Calls.ToArray()), "startup take failed");
+            clock.T += 3;
+            OwnershipHandover h = oldOrch.Handover();
+            Assert.Eq(true, h.LayoutFailed, "failure exported");
+            Assert.Eq(clock.T - 3, h.LayoutFailAt, "failure time exported");
+
+            var layout = new FakeLayout(); layout.ModeValue = LayoutMode.Clone; // 提示框关掉了，调用恢复正常
+            var o = Reloaded(ddc, layout, clock, d, h);
+            Assert.Eq(0, layout.Calls.Count, "no reconcile on reload");
+            clock.T += 6;
+            for (int i = 0; i < 8; i++) o.Tick();
+            Assert.Eq(0, layout.Calls.Count, "no retry before 10 s since the failure");
+            clock.T += 1;
+            o.Tick();
+            Assert.Eq("take", string.Join(",", layout.Calls.ToArray()), "new orchestrator retried the take");
+            Assert.Eq(LayoutMode.Extend, layout.ModeValue, "extended");
+            Assert.Eq(false, o.Handover().LayoutFailed, "recovered");
+            clock.T += 60;
+            for (int i = 0; i < 100; i++) o.Tick();
+            Assert.Eq(1, layout.Calls.Count, "no more retries after success");
+
+            // 推迟中的重试（缺屏）也跟着交接：拓扑恢复时只记一次"恢复"日志
+            var h2 = new OwnershipHandover(); h2.Owned = true; h2.LayoutFailed = true; h2.LayoutFailAt = clock.T; h2.RetryDeferred = true;
+            Assert.Eq(true, Reloaded(ddc, new FakeLayout(), clock, d, h2).Handover().RetryDeferred, "deferral exported again");
+            Directory.Delete(d, true);
+        }
     }
 }

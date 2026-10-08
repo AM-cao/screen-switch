@@ -19,6 +19,9 @@ namespace ScreenSwitch
         readonly Label status = new Label { Dock = DockStyle.Bottom, AutoSize = true, MaximumSize = new Size(600, 0), MinimumSize = new Size(0, 28), Padding = new Padding(16, 6, 16, 6) };
         // "高级"展开与否：整页重画后保持
         bool advancedOpen;
+        // 对方电脑的地址正在后台保存（setup-client.ps1 在跑）：这期间再次提交不理会，免得两个脚本同时跑。
+        // 在后台线程上清零，所以是 volatile。整页重画后照样有效（字段在窗口上，不在那一页上）。
+        volatile bool peerSaving;
 
         public SettingsForm(SettingsService svc, ITrayHost host)
         {
@@ -222,13 +225,26 @@ namespace ScreenSwitch
             panel.FieldsCommitted += delegate
             {
                 if (panel.PeerHost.Length == 0 || panel.PeerUser.Length == 0) return;
-                string ssh;
-                string err = svc.SetPeer(panel.PeerName, panel.PeerOs, panel.PeerHost, panel.PeerUser, out ssh);
-                if (err != null) { Ui.Error(status, err); return; }
-                Ui.Ok(status, "");
-                panel.SshLabel.Text = ssh.Trim();
-                // 换了地址时对方的输入口清零：输入口页重画，免得下次在那页改动把旧编码写回去
-                Later(delegate { RebuildTab(TabPorts); });
+                // setup-client.ps1 最多跑 60 秒：放到后台，设置窗口与托盘共用界面线程，卡住会停掉托盘的轮询
+                // （状态文件不更新，对方判定本机守护进程没在运行）。正在跑时再次提交不理会，免得两个脚本同时跑。
+                if (peerSaving) return;
+                peerSaving = true;
+                string name = panel.PeerName, os = panel.PeerOs, host = panel.PeerHost, user = panel.PeerUser;
+                string ssh = null, err = null;
+                panel.SshLabel.Text = Tr.T("peer.testing");
+                Background(panel, delegate
+                {
+                    try { err = svc.SetPeer(name, os, host, user, out ssh); }
+                    catch (Exception e) { err = e.Message; }
+                    finally { peerSaving = false; }
+                }, delegate
+                {
+                    if (err != null) { panel.SshLabel.Text = ""; Ui.Error(status, err); return; }
+                    Ui.Ok(status, "");
+                    panel.SshLabel.Text = (ssh ?? "").Trim();
+                    // 换了地址时对方的输入口清零：输入口页重画，免得下次在那页改动把旧编码写回去
+                    Later(delegate { RebuildTab(TabPorts); });
+                });
             };
             panel.AuthorizeClicked += delegate
             {
