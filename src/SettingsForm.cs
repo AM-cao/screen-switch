@@ -1,0 +1,317 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Drawing;
+using System.Threading;
+using System.Windows.Forms;
+
+namespace ScreenSwitch
+{
+    // 设置窗口（docs/settings-ui-design.md 第 5 节）：五个标签页，改动立即生效，没有保存/取消。
+    public class SettingsForm : Form
+    {
+        public const string TabPorts = "ports", TabPeer = "peer", TabScreens = "screens", TabHotkeys = "hotkeys", TabGeneral = "general";
+
+        readonly SettingsService svc;
+        readonly ITrayHost host;
+        readonly TabControl tabs = new TabControl { Dock = DockStyle.Fill };
+        readonly Label status = new Label { Dock = DockStyle.Bottom, AutoSize = false, Height = 28, Padding = new Padding(16, 6, 16, 0) };
+
+        public SettingsForm(SettingsService svc, ITrayHost host)
+        {
+            this.svc = svc; this.host = host;
+            Text = Tr.T("settings.title");
+            Font = Ui.Font;
+            ClientSize = new Size(640, 560);
+            MinimumSize = new Size(560, 420);
+            StartPosition = FormStartPosition.CenterScreen;
+            ShowInTaskbar = true;
+            Icon = TrayIcons.Make(true, 32);
+            Controls.Add(tabs);
+            Controls.Add(status);
+            // 先建好窗口句柄：后台读数完成时要 BeginInvoke 回来，此时窗口可能还没显示
+            IntPtr handle = Handle;
+            Build();
+        }
+
+        public void ShowTab(string name)
+        {
+            foreach (TabPage p in tabs.TabPages) if ((string)p.Tag == name) tabs.SelectedTab = p;
+        }
+
+        // 重新读配置，整页重画（设置写入后、或别处改了配置后调用）
+        public void Rebuild()
+        {
+            string current = tabs.SelectedTab == null ? TabPorts : (string)tabs.SelectedTab.Tag;
+            Build();
+            ShowTab(current);
+        }
+
+        void Build()
+        {
+            tabs.SuspendLayout();
+            foreach (TabPage p in tabs.TabPages) p.Dispose();
+            tabs.TabPages.Clear();
+            string err;
+            Config c = svc.Load(out err);
+            if (err != null) Ui.Error(status, err); else Ui.Ok(status, "");
+            AddTab(TabPorts, Tr.T("tab.ports"), PortsPage(c));
+            AddTab(TabPeer, Tr.T("tab.peer"), PeerPage(c));
+            AddTab(TabScreens, Tr.T("tab.screens"), ScreensPage(c));
+            AddTab(TabHotkeys, Tr.T("tab.hotkeys"), HotkeysPage(c));
+            AddTab(TabGeneral, Tr.T("tab.general"), GeneralPage(c));
+            tabs.ResumeLayout();
+        }
+
+        void AddTab(string key, string title, Control content)
+        {
+            var page = new TabPage(title) { Tag = key, AutoScroll = true, UseVisualStyleBackColor = true };
+            page.Controls.Add(content);
+            tabs.TabPages.Add(page);
+        }
+
+        // 设置写入后：成功则刷新整页，失败显示原因
+        void Done(string err)
+        {
+            if (err != null) { Ui.Error(status, err); Rebuild(); Ui.Error(status, err); return; }
+            Rebuild();
+        }
+
+        // 在后台做慢操作（读 capabilities、ssh），做完回到界面线程
+        void Background(Action work, Action then)
+        {
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                Action back = then;
+                try { work(); }
+                catch (Exception e) { string m = e.Message; back = delegate { Ui.Error(status, m); }; }
+                // 窗口已经关了就不回来
+                try { if (!IsDisposed && IsHandleCreated) BeginInvoke(back); }
+                catch (InvalidOperationException) { }
+            });
+        }
+
+        // ---- 输入口 ----
+
+        Control PortsPage(Config c)
+        {
+            var col = Ui.Column();
+            var mainRow = Ui.Row();
+            mainRow.Controls.Add(Ui.Line(c.MainEdid == Config.Placeholder ? Tr.T("ports.main-none") : Tr.T("ports.main", c.MainEdid)));
+            mainRow.Controls.Add(Ui.Button(Tr.T("ports.detect"), delegate { RunDetect(null); }));
+            col.Controls.Add(mainRow);
+            var note = Ui.Note(Tr.T("ports.reading"));
+            col.Controls.Add(note);
+            var table = new PortTable();
+            col.Controls.Add(table);
+            col.Controls.Add(Ui.Button(Tr.T("ports.add"), delegate
+            {
+                uint code = Ui.AskCode(this, Tr.T("ports.add.prompt"));
+                if (code != 0) table.AddPort(code);
+            }));
+            table.Changed += delegate { Done(svc.SetPorts(table.GetRows())); };
+            PortsResult result = null;
+            Background(delegate { result = svc.ReadPorts(c); }, delegate
+            {
+                table.SetRows(result.Rows);
+                note.Text = result.MonitorKnown ? "" : Tr.T("ports.unknown");
+            });
+            return col;
+        }
+
+        void RunDetect(string model)
+        {
+            DetectResult r = null;
+            Background(delegate { r = svc.Detect(model); }, delegate
+            {
+                if (r.Error != null && r.Candidates.Count > 1 && model == null)
+                {
+                    string chosen = ChooseMain(r.Candidates);
+                    if (chosen != null) RunDetect(chosen);
+                    return;
+                }
+                Done(r.Error);
+            });
+        }
+
+        // 几块显示器都能控制：让用户选一块，返回型号；取消返回 null
+        string ChooseMain(List<SetupMonitor> candidates)
+        {
+            using (var f = new Form { Text = Tr.T("app.name"), FormBorderStyle = FormBorderStyle.FixedDialog, MinimizeBox = false, MaximizeBox = false, StartPosition = FormStartPosition.CenterParent, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Font = Ui.Font })
+            {
+                var col = Ui.Column();
+                col.Controls.Add(Ui.Line(Tr.T("ports.choose")));
+                var list = new ListBox { Width = 360, Height = 90 };
+                foreach (SetupMonitor m in candidates) list.Items.Add(Setup.ModelId(m.DeviceId) + "  " + m.Name);
+                list.SelectedIndex = 0;
+                col.Controls.Add(list);
+                var row = Ui.Row();
+                var ok = new Button { Text = "OK", DialogResult = DialogResult.OK, AutoSize = true };
+                var cancel = new Button { Text = Tr.T("wizard.cancel"), DialogResult = DialogResult.Cancel, AutoSize = true };
+                row.Controls.Add(ok); row.Controls.Add(cancel);
+                col.Controls.Add(row);
+                f.Controls.Add(col);
+                f.AcceptButton = ok; f.CancelButton = cancel;
+                if (f.ShowDialog(this) != DialogResult.OK) return null;
+                return Setup.ModelId(candidates[list.SelectedIndex].DeviceId);
+            }
+        }
+
+        // ---- 对方电脑 ----
+
+        Control PeerPage(Config c)
+        {
+            var col = Ui.Column();
+            var panel = new PeerPanel();
+            string key = null;
+            panel.SetValues(c, "");
+            Background(delegate { key = svc.PublicKey(); }, delegate { panel.MyKeyBox.Text = key ?? ""; });
+            panel.FieldsCommitted += delegate
+            {
+                if (panel.PeerHost.Length == 0 || panel.PeerUser.Length == 0) return;
+                string ssh;
+                string err = svc.SetPeer(panel.PeerName, panel.PeerOs, panel.PeerHost, panel.PeerUser, out ssh);
+                if (err != null) { Ui.Error(status, err); return; }
+                Ui.Ok(status, "");
+                panel.SshLabel.Text = ssh.Trim();
+            };
+            panel.AuthorizeClicked += delegate
+            {
+                string theirs = panel.PeerKeyBox.Text, err = null, output;
+                Background(delegate { err = svc.Authorize(theirs, true, out output); }, delegate
+                {
+                    if (err != null) Ui.Error(panel.AuthLabel, err); else Ui.Ok(panel.AuthLabel, Tr.T("peer.authorized"));
+                });
+            };
+            panel.TestClicked += delegate
+            {
+                Ui.Ok(panel.TestLabel, Tr.T("peer.testing"));
+                PeerTestResult r = null;
+                Background(delegate { r = svc.TestPeer(); }, delegate { ShowTest(panel.TestLabel, r, svc); });
+            };
+            col.Controls.Add(panel);
+            col.Controls.Add(Ui.Note(Tr.T("peer.skip-hint")));
+            col.Controls.Add(Ui.Button(Tr.T("peer.clear"), delegate { Done(svc.ClearPeer()); }));
+            return col;
+        }
+
+        public static void ShowTest(Label l, PeerTestResult r, SettingsService svc)
+        {
+            if (r.Error != null) { Ui.Error(l, r.Error); return; }
+            if (r.Code == 0) { Ui.Ok(l, Tr.T("peer.reached-nocode", r.Name)); return; }
+            string text = Tr.T("peer.reached", r.Name, Ports.Label(r.Code));
+            string err;
+            Config c = svc.Load(out err);
+            if (err == null && c.PeerCode != 0 && c.PeerCode != r.Code) text += "\n" + Tr.T("peer.port-mismatch", Ports.Label(c.PeerCode), Ports.Label(r.Code));
+            Ui.Ok(l, text);
+        }
+
+        // ---- 屏幕 ----
+
+        Control ScreensPage(Config c)
+        {
+            var col = Ui.Column();
+            var comboRow = Ui.Row();
+            DetectResult probe = null;
+            var combo = Ui.Line(Tr.T("screens.combo", c.LayoutNone ? Tr.T("screens.main-only") : Tr.T("screens.main-plus", "…")));
+            comboRow.Controls.Add(combo);
+            comboRow.Controls.Add(Ui.Button(Tr.T("ports.detect"), delegate { RunDetect(c.MainEdid); }));
+            col.Controls.Add(comboRow);
+            if (!c.LayoutNone)
+                Background(delegate { probe = svc.Probe(c.MainEdid); }, delegate
+                {
+                    combo.Text = Tr.T("screens.combo", probe.Error == null && probe.OtherScreen.Length > 0 ? Tr.T("screens.main-plus", probe.OtherScreen) : Tr.T("screens.main-plus", "?"));
+                });
+            if (c.LayoutNone) return col;
+
+            col.Controls.Add(Ui.Line(Tr.T("screens.after-take")));
+            var extend = new RadioButton { Text = Tr.T("screens.extend"), AutoSize = true, Checked = host.OwnedLayout == OwnedLayout.Extend, Margin = new Padding(12, 2, 0, 2) };
+            var mainOnly = new RadioButton { Text = Tr.T("screens.mainonly"), AutoSize = true, Checked = host.OwnedLayout == OwnedLayout.MainOnly, Margin = new Padding(12, 2, 0, 8) };
+            extend.CheckedChanged += delegate { if (extend.Checked) host.SetOwnedLayout(OwnedLayout.Extend); };
+            mainOnly.CheckedChanged += delegate { if (mainOnly.Checked) host.SetOwnedLayout(OwnedLayout.MainOnly); };
+            col.Controls.Add(extend); col.Controls.Add(mainOnly);
+            var auto = new CheckBox { Text = Tr.T("screens.autosave"), AutoSize = true, Checked = host.AutoSaveLayout };
+            auto.CheckedChanged += delegate { host.SetAutoSaveLayout(auto.Checked); };
+            col.Controls.Add(auto);
+            col.Controls.Add(Ui.Note(Tr.T("screens.autosave.note")));
+            var saved = Ui.Line("");
+            col.Controls.Add(Ui.Button(Tr.T("screens.save-now"), delegate
+            {
+                string err = host.SaveLayoutNow();
+                if (err != null) Ui.Error(saved, err); else Ui.Ok(saved, Tr.T("screens.saved"));
+            }));
+            col.Controls.Add(Ui.Note(Tr.T("screens.save-now.note")));
+            col.Controls.Add(saved);
+            return col;
+        }
+
+        // ---- 快捷键 ----
+
+        Control HotkeysPage(Config c)
+        {
+            var col = Ui.Column();
+            col.Controls.Add(Ui.Note(Tr.T("hotkeys.note")));
+            var grid = new TableLayoutPanel { ColumnCount = 4, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink };
+            AddHotkeyRow(grid, Tr.T("hotkey.target.peer"), "peer", c.PeerHotkey);
+            foreach (Device d in c.Devices) AddHotkeyRow(grid, Tr.T("menu.give-to", d.Name), d.Code.ToString(), d.Hotkey);
+            col.Controls.Add(grid);
+            return col;
+        }
+
+        void AddHotkeyRow(TableLayoutPanel grid, string label, string target, string current)
+        {
+            int i = grid.RowCount++;
+            var box = new HotkeyBox { Text = current ?? "" };
+            var problem = Ui.Note("");
+            if (!string.IsNullOrEmpty(current) && host.HotkeyProblems.Contains(current.Trim())) Ui.Error(problem, Tr.T("hotkeys.failed"));
+            Action commit = delegate { Done(svc.SetOption("hotkey", new string[] { target, box.Text.Length == 0 ? "none" : box.Text })); };
+            box.Committed += commit;
+            grid.Controls.Add(new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 7, 12, 0) }, 0, i);
+            grid.Controls.Add(box, 1, i);
+            grid.Controls.Add(Ui.Button(Tr.T("hotkeys.clear"), delegate { box.Text = ""; commit(); }), 2, i);
+            grid.Controls.Add(problem, 3, i);
+        }
+
+        // ---- 通用 ----
+
+        Control GeneralPage(Config c)
+        {
+            var col = Ui.Column();
+            var auto = new CheckBox { Text = Tr.T("general.autostart"), AutoSize = true, Checked = svc.AutostartEnabled };
+            auto.CheckedChanged += delegate
+            {
+                string err = svc.SetAutostart(auto.Checked);
+                if (err != null) Ui.Error(status, err);
+            };
+            col.Controls.Add(auto);
+            col.Controls.Add(Ui.Button(Tr.T("general.wizard"), delegate { host.RunWizard(); }));
+            col.Controls.Add(Ui.Button(Tr.T("general.log"), delegate { host.OpenLog(); }));
+            col.Controls.Add(Ui.Note(Tr.T("general.version", AppInfo.Version)));
+
+            var adv = Ui.Column();
+            adv.Padding = new Padding(12, 0, 0, 0);
+            adv.Visible = false;
+            var toggle = Ui.Button(Tr.T("general.advanced") + " ▸", null);
+            toggle.Click += delegate
+            {
+                adv.Visible = !adv.Visible;
+                toggle.Text = Tr.T("general.advanced") + (adv.Visible ? " ▾" : " ▸");
+            };
+            col.Controls.Add(toggle);
+            var direct = new CheckBox { Text = Tr.T("general.directtake"), AutoSize = true, Checked = c.DirectTake };
+            direct.CheckedChanged += delegate { Done(svc.SetOption("direct-take", new string[] { direct.Checked ? "on" : "off" })); };
+            adv.Controls.Add(direct);
+            adv.Controls.Add(Ui.Line(Tr.T("general.aftertake")));
+            var after = new TextBox { Width = 480, Text = c.AfterTakeCommand };
+            Ui.OnCommit(after, delegate { Done(svc.SetOption("after-take", new string[] { after.Text })); });
+            adv.Controls.Add(after);
+            adv.Controls.Add(Ui.Button(Tr.T("general.openfolder"), delegate
+            {
+                try { Process.Start("explorer.exe", "\"" + svc.Dir + "\""); }
+                catch (Exception e) { Ui.Error(status, e.Message); }
+            }));
+            col.Controls.Add(adv);
+            return col;
+        }
+    }
+}

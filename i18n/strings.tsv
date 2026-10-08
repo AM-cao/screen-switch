@@ -44,3 +44,63 @@ cmd.autostart.on	开机自动运行：开	Start at login: on
 cmd.autostart.off	开机自动运行：关	Start at login: off
 cmd.peer.code	{0} 接在编码 {1} 的输入口。	{0} uses input code {1}.
 cmd.peer.code-unknown	连上了 {0}，但它还不知道自己接在哪个输入口。	Reached {0}, but it does not know its own input yet.
+settings.title	ScreenSwitch 设置	ScreenSwitch Settings
+tab.ports	输入口	Inputs
+tab.peer	对方电脑	Other computer
+tab.screens	屏幕	Screens
+tab.hotkeys	快捷键	Shortcuts
+tab.general	通用	General
+ports.main	主屏：{0}	Main screen: {0}
+ports.main-none	还没有设置主屏	The main screen is not set up yet
+ports.detect	重新检测	Detect again
+ports.reading	正在读取主屏的输入口（要几秒）…	Reading the main screen's inputs (takes a few seconds)…
+ports.unknown	读不出主屏有哪些输入口：下面只列已登记的，可以手动添加。	Could not read the main screen's inputs; only the registered ones are listed, and you can add more.
+ports.add	添加输入口	Add input
+ports.add.prompt	输入口的编码（1–255，常见：15 DP 1、16 DP 2、17 HDMI 1、18 HDMI 2）：	Input code (1–255; common: 15 DP 1, 16 DP 2, 17 HDMI 1, 18 HDMI 2):
+ports.choose	几块显示器都能控制，哪一块是主屏？	Several displays can be controlled. Which one is the main screen?
+port.use.self	这台电脑	This computer
+port.use.none	没接	Nothing
+port.use.peer	对方电脑	Other computer
+port.use.device	设备	Device
+peer.name	名字	Name
+peer.os	系统	System
+peer.host	地址（主机名或 IP）	Address (host name or IP)
+peer.user	用户名	User name
+peer.mykey	这台电脑的公钥：把它粘贴到对方电脑设置窗口的“对方公钥”里，点“授权”。	This computer's public key: paste it into "Other computer's key" in the other computer's Settings and click Authorise.
+peer.copy	复制	Copy
+peer.copied	已复制	Copied
+peer.theirkey	对方公钥	Other computer's key
+peer.authorize	授权	Authorise
+peer.authorized	已授权	Authorised
+peer.mac-remote-login	（对方是 Mac 时，还要在 Mac 的“系统设置 → 通用 → 共享”里打开“远程登录”。）	(If the other computer is a Mac, also turn on Remote Login in System Settings → General → Sharing on the Mac.)
+peer.test	测试连接	Test connection
+peer.testing	正在连接…	Connecting…
+peer.reached	已连上 {0}，它接在 {1}。	Connected to {0}; it uses {1}.
+peer.reached-nocode	已连上 {0}，它还不知道自己接在哪个口。	Connected to {0}; it does not know its own input yet.
+peer.port-mismatch	注意：输入口里标的对方电脑是 {0}，而它报告的是 {1}。	Note: Inputs marks {0} as the other computer, but it reports {1}.
+peer.clear	不连对方电脑	Don't connect to another computer
+peer.skip-hint	不连对方电脑也能用，只是主屏不在这台电脑上时，要用显示器按钮切回来。	It works without the other computer too; you will then use the monitor's button to switch back when the main screen is elsewhere.
+screens.combo	屏幕组合：{0}	Screens: {0}
+screens.main-only	只有主屏	Main screen only
+screens.main-plus	主屏 + {0}	Main screen + {0}
+screens.after-take	拿回主屏后：	After taking back the main screen:
+screens.extend	扩展屏幕	Extend displays
+screens.mainonly	只用主屏	Main screen only
+screens.autosave	自动记住屏幕排列	Remember the arrangement automatically
+screens.autosave.note	在系统设置里拖动两块屏的位置后，自动记住，下次拿回时按这个位置恢复。	After you drag the screens around in Windows Settings, the new arrangement is remembered and restored the next time you take back the main screen.
+screens.save-now	现在记住当前排列	Remember the current arrangement now
+screens.save-now.note	立刻记下现在两块屏的位置，作用同上。	Records the current arrangement right away; same effect as above.
+screens.saved	已记住当前排列	Arrangement remembered
+hotkeys.note	默认没有快捷键。点输入框后按下组合键即可设置（要带 Ctrl、Alt、Shift 或 Win）。	There are no shortcuts by default. Click a box and press a key combination (with Ctrl, Alt, Shift or Win).
+hotkeys.clear	清除	Clear
+hotkeys.failed	没能注册：可能被别的程序占用。	Could not register; another program may be using it.
+general.autostart	开机自动运行	Start at login
+general.wizard	重新运行设置向导	Run the setup wizard again
+general.log	打开日志	Open log
+general.version	版本 {0}	Version {0}
+general.advanced	高级	Advanced
+general.directtake	先直接切换（显示器在其他输入口也接受指令时更快）	Try switching directly first (faster on monitors that accept commands on any input)
+general.aftertake	拿回主屏后执行的命令：	Command to run after taking back the main screen:
+general.openfolder	打开配置文件所在的文件夹	Open the folder with the configuration
+wizard.cancel	取消	Cancel
+menu.give-to	切给 {0}	Switch to {0}
