@@ -53,6 +53,7 @@ namespace ScreenSwitch
 
         public static int Run(string outDir, string lang)
         {
+            Application.EnableVisualStyles();
             Tr.Use(lang == "en" ? "en" : "zh");
             Directory.CreateDirectory(outDir);
             string work = Path.Combine(Path.GetTempPath(), "ss-ui-dump-" + Guid.NewGuid());
@@ -88,7 +89,7 @@ namespace ScreenSwitch
                 }
                 return 0;
             }
-            finally { try { Directory.Delete(work, true); } catch (IOException) { } }
+            finally { try { Directory.Delete(work, true); } catch (Exception) { } }
         }
 
         static void Prepare(Form f)

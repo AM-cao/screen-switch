@@ -173,7 +173,11 @@ namespace ScreenSwitch
                         return 0;
                     }
                 case "ui-dump":
-                    if (args.Length < 2 || args.Length > 3) return 1;
+                    if (args.Length < 2 || args.Length > 3 || (args.Length == 3 && args[2] != "zh" && args[2] != "en"))
+                    {
+                        Console.WriteLine("usage: ScreenSwitchCli.exe ui-dump <dir> [zh|en]");
+                        return 1;
+                    }
                     return UiDump.Run(args[1], args.Length == 3 ? args[2] : Tr.Lang);
                 case "diag":
                     {
