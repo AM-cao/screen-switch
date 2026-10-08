@@ -78,7 +78,7 @@ namespace ScreenSwitch
         }
 
         public static string DefaultPeerName(string os) { return os == "windows" ? "Windows" : "Mac"; }
-        public static string DefaultDeviceName(int n) { return "设备 " + n; }
+        public static string DefaultDeviceName(int n) { return Tr.T("device.default", n); }
 
         static bool Blank(string s) { return s == null || s.Trim().Length == 0; }
 

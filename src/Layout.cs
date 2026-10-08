@@ -218,8 +218,8 @@ namespace ScreenSwitch
         {
             PATH_INFO[] paths; MODE_INFO[] modes;
             QueryActive(out paths, out modes);
-            if (paths.Length != 2) throw new LayoutException("需要恰好两块活动显示器，当前 " + paths.Length + " 块");
-            if (IsClone(paths[0], paths[1], modes)) throw new LayoutException("当前是克隆模式，请先切回扩展模式再保存");
+            if (paths.Length != 2) throw new LayoutException(Tr.T("layout.need-two", paths.Length));
+            if (IsClone(paths[0], paths[1], modes)) throw new LayoutException(Tr.T("layout.is-clone"));
             // 各路径的目标设备路径一并存下：应用时靠它在当前路径里找回各自的适配器
             var devs = new string[paths.Length];
             int mainCount = 0;
@@ -228,7 +228,7 @@ namespace ScreenSwitch
                 devs[i] = TargetDevicePath(paths[i].targetInfo.adapterId, paths[i].targetInfo.id);
                 if (IsMainDevicePath(devs[i], mainEdid)) mainCount++;
             }
-            if (mainCount != 1) throw new LayoutException("没有找到主屏 " + mainEdid);
+            if (mainCount != 1) throw new LayoutException(Tr.T("layout.main-not-found", mainEdid));
             string tmpPath = snapshotPath + ".tmp";
             File.WriteAllBytes(tmpPath, SnapshotToBytes(paths, modes, devs));
             File.Copy(tmpPath, snapshotPath, true);
@@ -236,7 +236,7 @@ namespace ScreenSwitch
             log.Info("layout snapshot saved: " + paths.Length + " paths, " + modes.Length + " modes");
         }
 
-        const string CorruptMsg = "布局快照损坏，请在双屏状态下重新保存布局";
+        static string CorruptMsg { get { return Tr.T("layout.corrupt"); } }
 
         // 快照文件：int32 路径数，int32 模式数，各 PATH_INFO，各 MODE_INFO —— 旧快照到此为止。
         // 新快照后面接一段尾部：标记 "TDP1"，int32 条数（等于路径数），再依次是每条路径的目标设备路径
@@ -248,7 +248,7 @@ namespace ScreenSwitch
         // devicePaths：各路径保存时的目标设备路径；旧快照为 null。
         void LoadSnapshot(out PATH_INFO[] paths, out MODE_INFO[] modes, out string[] devicePaths)
         {
-            if (!HasSnapshot) throw new LayoutException("布局快照不存在，请先在双屏状态下保存布局");
+            if (!HasSnapshot) throw new LayoutException(Tr.T("layout.no-snapshot"));
             byte[] data;
             try
             {
@@ -331,7 +331,7 @@ namespace ScreenSwitch
         {
             PATH_INFO[] cur; MODE_INFO[] curModes;
             QueryActive(out cur, out curModes);
-            if (cur.Length == 0) throw new LayoutException("当前没有活动显示路径");
+            if (cur.Length == 0) throw new LayoutException(Tr.T("layout.no-active-path"));
             LUID legacy = cur[0].sourceInfo.adapterId;
             string[] curDevs = null; LUID[] curLuids = null;
             if (devicePaths != null) CurrentTargets(out curDevs, out curLuids);
@@ -449,7 +449,7 @@ namespace ScreenSwitch
             for (int i = 0; i < snapPaths.Length; i++)
                 if (SnapIsMain(snapPaths, devs, i)) { mainIdx = i; mainCount++; }
             // 找不到（或找到两条）主屏时不能猜，否则可能把主屏关掉
-            if (mainCount != 1) throw new LayoutException("快照中没有找到主屏 " + mainEdid);
+            if (mainCount != 1) throw new LayoutException(Tr.T("layout.snap-main-not-found", mainEdid));
             PATH_INFO[] paths; MODE_INFO[] modes;
             MainOnlyConfig(snapPaths, snapModes, mainIdx, out paths, out modes);
 
@@ -458,7 +458,7 @@ namespace ScreenSwitch
             {
                 int vrc = SetDisplayConfig(1, paths, 2, modes, VALIDATE_FLAGS);
                 log.Error("layout take main-only: SetDisplayConfig rc=" + rc + " (validate rc=" + vrc + ")");
-                throw new LayoutException("关闭副屏失败 rc=" + rc);
+                throw new LayoutException(Tr.T("layout.close-second-failed", rc));
             }
             // 显示器正在切换输入（例如刚被切回本机）时拓扑会短暂读成 Missing（实测 1–3 秒）：
             // 读到 Missing 就每 250 毫秒重查，最多 3 秒；读到扩展/克隆或到时仍是 Missing 才算失败。
@@ -468,7 +468,7 @@ namespace ScreenSwitch
             if (now != LayoutMode.MainOnly)
             {
                 log.Error("layout take main-only: applied but mode is " + now);
-                throw new LayoutException("关闭副屏后拓扑不是仅主屏（当前 " + now + "）");
+                throw new LayoutException(Tr.T("layout.not-main-only", now));
             }
             log.Info("layout take main-only: ok");
         }
@@ -493,13 +493,13 @@ namespace ScreenSwitch
         // 1 = 主屏目标模式（保留原刷新率等时序）；路径的两个模式索引随之改为 0 和 1。快照数组不被改动。
         public static void MainOnlyConfig(PATH_INFO[] snapPaths, MODE_INFO[] snapModes, int mainIdx, out PATH_INFO[] paths, out MODE_INFO[] modes)
         {
-            if (mainIdx < 0 || mainIdx >= snapPaths.Length) throw new LayoutException("快照中没有找到主屏");
+            if (mainIdx < 0 || mainIdx >= snapPaths.Length) throw new LayoutException(Tr.T("layout.snap-no-main"));
             PATH_INFO pm = snapPaths[mainIdx];
             uint si = pm.sourceInfo.modeInfoIdx, ti = pm.targetInfo.modeInfoIdx;
             if (si == MODE_IDX_INVALID || si >= snapModes.Length || snapModes[si].infoType != MODE_SOURCE)
-                throw new LayoutException("快照中主屏没有源模式");
+                throw new LayoutException(Tr.T("layout.snap-main-no-source"));
             if (ti == MODE_IDX_INVALID || ti >= snapModes.Length || snapModes[ti].infoType != MODE_TARGET)
-                throw new LayoutException("快照中主屏没有目标模式");
+                throw new LayoutException(Tr.T("layout.snap-main-no-target"));
 
             modes = new MODE_INFO[2];
             modes[0] = snapModes[si];
@@ -537,11 +537,11 @@ namespace ScreenSwitch
         // 路径 0 = 副屏，路径 1 = 同一个源输出到主屏（目标模式交给系统选）。快照数组不被改动。
         public static void ReleaseConfig(PATH_INFO[] snapPaths, MODE_INFO[] snapModes, int mainIdx, int relW, int relH, out PATH_INFO[] paths, out MODE_INFO[] modes)
         {
-            if (snapPaths.Length != 2 || mainIdx < 0 || mainIdx > 1) throw new LayoutException("快照中没有找到主屏");
+            if (snapPaths.Length != 2 || mainIdx < 0 || mainIdx > 1) throw new LayoutException(Tr.T("layout.snap-no-main"));
             PATH_INFO pm = snapPaths[mainIdx];
             PATH_INFO ps = snapPaths[1 - mainIdx];
             if (ps.targetInfo.modeInfoIdx == MODE_IDX_INVALID || ps.targetInfo.modeInfoIdx >= snapModes.Length)
-                throw new LayoutException("快照中副屏没有目标模式");
+                throw new LayoutException(Tr.T("layout.snap-second-no-target"));
             uint w, h;
             if (relW > 0 && relH > 0) { w = (uint)relW; h = (uint)relH; }
             else
@@ -549,7 +549,7 @@ namespace ScreenSwitch
                 uint si = ps.sourceInfo.modeInfoIdx;
                 if (si == MODE_IDX_INVALID || si >= snapModes.Length || snapModes[si].infoType != MODE_SOURCE
                     || snapModes[si].sourceMode.width == 0 || snapModes[si].sourceMode.height == 0)
-                    throw new LayoutException("快照中副屏没有源模式（release 为 0 时要用它的分辨率）");
+                    throw new LayoutException(Tr.T("layout.snap-second-no-source"));
                 w = snapModes[si].sourceMode.width; h = snapModes[si].sourceMode.height;
             }
 
@@ -589,12 +589,12 @@ namespace ScreenSwitch
                 }
                 Thread.Sleep(3000);
             }
-            catch (Exception e) { throw new LayoutException("DisplaySwitch " + arg + " 失败: " + e.Message); }
+            catch (Exception e) { throw new LayoutException(Tr.T("layout.fallback-failed", arg, e.Message)); }
             PATH_INFO[] paths; MODE_INFO[] modes;
             QueryActive(out paths, out modes);
             bool cloned = paths.Length == 2 && IsClone(paths[0], paths[1], modes);
             bool extended = paths.Length == 2 && !cloned;
-            if (expectClone ? !cloned : !extended) throw new LayoutException("回退切换失败：拓扑未改变");
+            if (expectClone ? !cloned : !extended) throw new LayoutException(Tr.T("layout.fallback-unchanged"));
         }
 
         // ---- 诊断 ----
@@ -655,7 +655,7 @@ namespace ScreenSwitch
                 PATH_INFO p = paths[i];
                 uint idx = p.sourceInfo.modeInfoIdx;
                 if (idx == MODE_IDX_INVALID || idx >= modes.Length || modes[idx].infoType != MODE_SOURCE)
-                    throw new LayoutException("显示路径的源模式索引无效：" + idx);
+                    throw new LayoutException(Tr.T("layout.bad-source-index", idx));
                 SOURCE_MODE sm = modes[idx].sourceMode;
                 RATIONAL r = p.targetInfo.refreshRate;
                 string hz = r.Denominator == 0 ? "?" : ((double)r.Numerator / r.Denominator).ToString("0.0", CultureInfo.InvariantCulture);

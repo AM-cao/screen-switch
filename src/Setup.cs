@@ -87,8 +87,8 @@ namespace ScreenSwitch
             bool devicesOnly = args.Length == 1 && args[0] == "devices";
             if (args.Length != 0 && !devicesOnly)
             {
-                output.WriteLine("用法：ScreenSwitchCli.exe setup            全部设置");
-                output.WriteLine("      ScreenSwitchCli.exe setup devices    只改设备列表");
+                output.WriteLine(Tr.T("setup.usage.all"));
+                output.WriteLine(Tr.T("setup.usage.devices"));
                 return 1;
             }
             return new Setup(configPath, input, output, env, echoInput).Go(devicesOnly);
@@ -103,7 +103,7 @@ namespace ScreenSwitch
                 if (devicesOnly) DevicesOnly(cfg);
                 else
                 {
-                    if (brokenConfig) Say("现有的 config.json 读不了（" + cfg.LoadError + "），会重新生成，原文件另存为 config.json.bak。");
+                    if (brokenConfig) Say(Tr.T("setup.config-unreadable", cfg.LoadError));
                     Full(cfg);
                 }
                 return Finish(cfg, !devicesOnly);
@@ -111,13 +111,13 @@ namespace ScreenSwitch
             catch (Aborted)
             {
                 Say("");
-                Say("输入结束了，配置没有改动。");
+                Say(Tr.T("setup.input-ended"));
                 return 1;
             }
             catch (Stopped e)
             {
                 Say(e.Message);
-                Say("配置没有改动。");
+                Say(Tr.T("setup.unchanged"));
                 return 1;
             }
         }
@@ -210,35 +210,31 @@ namespace ScreenSwitch
 
         // ---- 全部步骤 ----
 
-        const string NoDdc =
-            "没有显示器应答 DDC/CI，无法设置。可能的原因：\r\n" +
-            "  - 显示器自己的菜单（OSD）里没有打开 DDC/CI；\r\n" +
-            "  - 连接线、扩展坞或转接头不传 DDC；\r\n" +
-            "  - 有的显示器只在当前输入口应答，而主屏现在显示的是别的设备：把主屏切到这台电脑后再运行一次。";
+        static string NoDdc { get { return Tr.T("setup.no-ddc").Replace("\n", "\r\n"); } }
 
         void Full(Config cfg)
         {
-            Say("ScreenSwitch 设置。开始前请确认：主屏（两台电脑共用的那块显示器）正显示这台电脑的画面。");
+            Say(Tr.T("setup.intro"));
             Say("");
 
             // 1 主屏
             List<SetupMonitor> mons = env.Monitors();
             var ddc = new List<SetupMonitor>();
             var ids = new List<string>();
-            Say("已连接的显示器：");
+            Say(Tr.T("setup.monitors-head"));
             for (int i = 0; i < mons.Count; i++)
             {
                 SetupMonitor m = mons[i];
                 ids.Add(m.DeviceId);
                 if (m.Ddc) ddc.Add(m);
-                Say("  " + (i + 1) + ". " + Label(m) + "：" + (m.Ddc ? "DDC/CI 有应答，当前输入口编码 " + (m.Input & 0xFF) : "DDC/CI 没有应答"));
+                Say(m.Ddc ? Tr.T("setup.mon-ddc", i + 1, Label(m), m.Input & 0xFF) : Tr.T("setup.mon-noddc", i + 1, Label(m)));
             }
-            if (mons.Count == 0) Say("  （没有找到）");
+            if (mons.Count == 0) Say(Tr.T("setup.none-found"));
             if (ddc.Count == 0) throw new Stopped(NoDdc);
 
             // 4 屏幕组合（不用提问，先查：不支持就不必往下问了）
             int count = Math.Max(env.ConnectedCount(), 1);
-            if (count > 2) throw new Stopped("这台电脑接了 " + count + " 块屏。三块及以上的屏不支持：只留主屏，或主屏加另一块屏，然后再运行一次。");
+            if (count > 2) throw new Stopped(Tr.T("setup.too-many", count));
 
             SetupMonitor main;
             if (ddc.Count == 1)
@@ -251,17 +247,17 @@ namespace ScreenSwitch
                     if (Matches(m, cfg.MainEdid) && MatchCount(mons, cfg.MainEdid) == 1) configured = m;
                 if (configured != null && configured != main)
                 {
-                    Say("原来设置的主屏是 " + Label(configured) + "，它现在没有应答 DDC/CI（多半是正显示别的设备）；应答的只有 " + Label(main) + "。");
-                    string a = Ask("把主屏换成 " + Label(main) + " 吗？（y = 换，回车 = 不换）：").Trim().ToLowerInvariant();
-                    if (a != "y" && a != "yes") throw new Stopped("请把主屏切到这台电脑（用显示器上的按钮），再运行一次。");
+                    Say(Tr.T("setup.main-moved", Label(configured), Label(main)));
+                    string a = Ask(Tr.T("setup.ask-swap-main", Label(main))).Trim().ToLowerInvariant();
+                    if (a != "y" && a != "yes") throw new Stopped(Tr.T("setup.switch-main-first"));
                 }
-                Say("主屏：" + Label(main) + "（只有它应答 DDC/CI，已自动选中）");
-                if (mons.Count > 1 && configured == null) Say("如果主屏其实是另一块（它此刻正显示别的设备所以没有应答），请按 Ctrl+C 退出，把主屏切到这台电脑后再运行。");
+                Say(Tr.T("setup.main-auto", Label(main)));
+                if (mons.Count > 1 && configured == null) Say(Tr.T("setup.main-maybe-other"));
             }
             else
             {
                 main = ChooseMain(cfg, mons);
-                Say("主屏：" + Label(main));
+                Say(Tr.T("setup.main-line", Label(main)));
             }
             // 已配置的标识正好只认得出这一块时不改
             if (!(Matches(main, cfg.MainEdid) && MatchCount(mons, cfg.MainEdid) == 1)) cfg.MainEdid = MainEdidFor(main.DeviceId, ids);
@@ -269,18 +265,18 @@ namespace ScreenSwitch
             // 2 本机编码：主屏正显示本机，读到的就是本机所接的输入口
             uint code = main.Input & 0xFF;
             cfg.SelfCode = code;
-            Say(code == 0 ? "本机编码：读到的是 0，记为未知。" : "本机编码：" + CodeLabel(code));
+            Say(code == 0 ? Tr.T("setup.self-code-zero") : Tr.T("setup.self-code", CodeLabel(code)));
             if (code != 0 && cfg.PeerCode == code)
             {
                 cfg.PeerCode = 0;
-                Say("原来记的对方编码也是 " + code + "，已清除。");
+                Say(Tr.T("setup.peer-code-cleared", code));
             }
             cfg.Layout = count >= 2 ? "second" : "none";
-            Say("屏幕组合：" + (count >= 2 ? "主屏加另一块屏" : "只有主屏"));
+            Say(Tr.T("setup.layout-line", LayoutText(count >= 2)));
             Say("");
 
             // 3 本机名字
-            string name = Ask("本机名字 [" + cfg.SelfName + "]（回车 = 不改）：").Trim();
+            string name = Ask(Tr.T("setup.ask-self-name", cfg.SelfName)).Trim();
             if (name.Length > 0) cfg.SelfName = name;
 
             // 5 对方，6 设备
@@ -289,18 +285,21 @@ namespace ScreenSwitch
             if (!Adopt(cfg, fromPeer)) EditDevices(cfg);
         }
 
+        // 屏幕组合的文字：second = 主屏加另一块屏
+        static string LayoutText(bool second) { return second ? Tr.T("setup.layout-second") : Tr.T("setup.layout-none"); }
+
         static string Label(SetupMonitor m)
         {
             string model = ModelId(m.DeviceId), name = (m.Name ?? "").Trim();
-            if (name.Length > 0 && model.Length > 0) return name + "（" + model + "）";
+            if (name.Length > 0 && model.Length > 0) return Tr.T("setup.label-paren", name, model);
             if (name.Length > 0) return name;
-            return model.Length > 0 ? model : "未知显示器";
+            return model.Length > 0 ? model : Tr.T("setup.unknown-monitor");
         }
 
         static string CodeLabel(uint code)
         {
             string n = InputName(code);
-            return n.Length > 0 ? code + "（" + n + "）" : code.ToString(CultureInfo.InvariantCulture);
+            return n.Length > 0 ? Tr.T("setup.label-paren", code, n) : code.ToString(CultureInfo.InvariantCulture);
         }
 
         static bool Blank(string s) { return s == null || s.Trim().Length == 0; }
@@ -326,16 +325,16 @@ namespace ScreenSwitch
             if (hits != 1) def = 0;
             for (;;)
             {
-                string a = Ask("有几块显示器应答 DDC/CI。主屏是哪一块？输入序号" + (def > 0 ? "（回车 = " + def + "）" : "") + "：").Trim();
+                string a = Ask(Tr.T("setup.choose-main", def > 0 ? Tr.T("setup.enter-default", def) : "")).Trim();
                 int n;
                 if (a.Length == 0 && def > 0) n = def;
                 else if (!int.TryParse(a, NumberStyles.None, CultureInfo.InvariantCulture, out n) || n < 1 || n > mons.Count)
                 {
-                    Say("请输入列表里的序号。");
+                    Say(Tr.T("setup.bad-number"));
                     continue;
                 }
                 if (mons[n - 1].Ddc) return mons[n - 1];
-                Say("这块显示器没有应答 DDC/CI，不能作主屏。");
+                Say(Tr.T("setup.main-no-ddc"));
             }
         }
 
@@ -347,30 +346,30 @@ namespace ScreenSwitch
             Say("");
             if (cfg.PeerConfigured)
             {
-                Say("另一台电脑：" + cfg.PeerName + "（" + Config.DefaultPeerName(cfg.PeerOs) + "，" + cfg.PeerUser + "@" + cfg.PeerHost + "）");
+                Say(Tr.T("setup.peer-line", cfg.PeerName, Config.DefaultPeerName(cfg.PeerOs), cfg.PeerUser, cfg.PeerHost));
                 for (;;)
                 {
-                    string a = Ask("回车 = 保留，n = 重新填写，- = 不要对方：").Trim().ToLowerInvariant();
+                    string a = Ask(Tr.T("setup.ask-peer-keep")).Trim().ToLowerInvariant();
                     if (a.Length == 0) return AskPeerInfo(cfg);
                     if (a == "n") break;
                     if (a == "-")
                     {
                         cfg.PeerHost = ""; cfg.PeerUser = ""; cfg.PeerCode = 0;
-                        Say("已去掉对方：主屏不在本机时要用显示器上的按钮切回来。");
+                        Say(Tr.T("setup.peer-removed"));
                         return null;
                     }
-                    Say("请直接回车，或输入 n 或 -。");
+                    Say(Tr.T("setup.peer-keep-bad"));
                 }
             }
-            else if (!YesNo("现在设置另一台电脑吗？（y / n，回车 = y）："))
+            else if (!YesNo(Tr.T("setup.ask-peer-now")))
             {
-                Say("已跳过。以后要设置，再运行一次 ScreenSwitchCli.exe setup。");
+                Say(Tr.T("setup.peer-skipped"));
                 return null;
             }
 
             bool had = cfg.PeerConfigured;
             bool defaultName = !had || cfg.PeerName == Config.DefaultPeerName(cfg.PeerOs);
-            string name = Ask(defaultName ? "对方的名字（回车 = 按系统叫 Windows 或 Mac）：" : "对方的名字 [" + cfg.PeerName + "]：").Trim();
+            string name = Ask(defaultName ? Tr.T("setup.ask-peer-name-default") : Tr.T("setup.ask-peer-name", cfg.PeerName)).Trim();
             string os = AskOs(cfg.PeerOs);
             string host = AskHost(had ? cfg.PeerHost : "");
             string user = AskUser(had ? cfg.PeerUser : "");
@@ -383,35 +382,35 @@ namespace ScreenSwitch
             cfg.PeerOs = os; cfg.PeerHost = host; cfg.PeerUser = user;
 
             Say("");
-            Say("正在配置本机的 SSH（密钥和 ~/.ssh/config）…");
+            Say(Tr.T("setup.ssh-config"));
             string text;
             int rc = env.SshClientSetup(user, host, out text);
             if (rc == -1)
             {
-                Say("程序旁边没有 setup-client.ps1，这一步没有做。请在仓库目录里手动运行：");
+                Say(Tr.T("setup.ssh-script-missing"));
                 Say("  powershell -ExecutionPolicy Bypass -File setup-client.ps1 -PeerUser " + user + " -PeerHost " + host);
             }
             else
             {
                 foreach (string line in (text ?? "").Split('\n'))
                     if (line.Trim().Length > 0) Say("  " + line.TrimEnd());
-                if (rc != 0) Say("SSH 配置没有成功（退出码 " + rc + "）。可以稍后重新运行设置。");
+                if (rc != 0) Say(Tr.T("setup.ssh-failed", rc));
             }
 
             string key = SafeKey(env.PublicKey());
             if (key == null)
             {
-                Say("没有找到本机的 SSH 公钥（~/.ssh/id_ed25519.pub），" + cfg.PeerName + " 暂时无法授权这台电脑。");
+                Say(Tr.T("setup.key-missing", cfg.PeerName));
             }
             else
             {
-                Say("本机的公钥：");
+                Say(Tr.T("setup.key-own"));
                 Say("  " + key);
                 Say(os == "windows"
-                    ? "请在 " + cfg.PeerName + " 上打开管理员 PowerShell，进入 ScreenSwitch 的安装目录，执行："
-                    : "请在 " + cfg.PeerName + " 的终端里执行：");
+                    ? Tr.T("setup.key-run-windows", cfg.PeerName)
+                    : Tr.T("setup.key-run-mac", cfg.PeerName));
                 Say("  " + PeerCommand(os, key));
-                Ask("执行完后按回车继续（现在做不了也按回车）：");
+                Ask(Tr.T("setup.key-continue"));
             }
             return AskPeerInfo(cfg);
         }
@@ -419,25 +418,25 @@ namespace ScreenSwitch
         // 能连通时用 request info 取对方的编码和设备列表；连不上不算错
         List<Device> AskPeerInfo(Config cfg)
         {
-            Say("正在询问 " + cfg.PeerName + " …");
+            Say(Tr.T("setup.asking-peer", cfg.PeerName));
             PeerInfo info = env.RequestInfo(cfg);
             if (info == null)
             {
                 Say(cfg.PeerCode != 0
-                    ? "没有连上 " + cfg.PeerName + "，沿用已有的编码 " + cfg.PeerCode + "。"
-                    : "没有连上 " + cfg.PeerName + "：它接在哪个输入口还不知道。以后第一次切给它时，托盘程序会自动询问，不用再运行设置。");
+                    ? Tr.T("setup.peer-unreachable-keep", cfg.PeerName, cfg.PeerCode)
+                    : Tr.T("setup.peer-unreachable", cfg.PeerName));
                 return null;
             }
-            if (info.Code == 0) Say(cfg.PeerName + " 还不知道自己接在哪个输入口（它那边还没有运行设置）。");
+            if (info.Code == 0) Say(Tr.T("setup.peer-no-code", cfg.PeerName));
             else if (cfg.SelfCode != 0 && info.Code == cfg.SelfCode)
             {
                 cfg.PeerCode = 0;
-                Say(cfg.PeerName + " 报告的编码和本机相同（" + info.Code + "）：其中一台运行设置时，主屏显示的不是它自己。请在那台电脑上重新运行设置。");
+                Say(Tr.T("setup.peer-same-code", cfg.PeerName, info.Code));
             }
             else
             {
                 cfg.PeerCode = info.Code;
-                Say(cfg.PeerName + " 的编码：" + CodeLabel(info.Code));
+                Say(Tr.T("setup.peer-code", cfg.PeerName, CodeLabel(info.Code)));
             }
             return info.Devices;
         }
@@ -449,7 +448,7 @@ namespace ScreenSwitch
                 string a = Ask(prompt).Trim().ToLowerInvariant();
                 if (a.Length == 0 || a == "y" || a == "yes") return true;
                 if (a == "n" || a == "no") return false;
-                Say("请输入 y 或 n。");
+                Say(Tr.T("setup.yes-no"));
             }
         }
 
@@ -457,11 +456,11 @@ namespace ScreenSwitch
         {
             for (;;)
             {
-                string a = Ask("对方的系统（1 = Windows，2 = Mac，回车 = " + (current == "windows" ? "1" : "2") + "）：").Trim().ToLowerInvariant();
+                string a = Ask(Tr.T("setup.ask-os", current == "windows" ? "1" : "2")).Trim().ToLowerInvariant();
                 if (a.Length == 0) return current == "windows" ? "windows" : "mac";
                 if (a == "1" || a == "w" || a == "win" || a == "windows") return "windows";
                 if (a == "2" || a == "m" || a == "mac" || a == "macos") return "mac";
-                Say("请输入 1 或 2。");
+                Say(Tr.T("setup.os-bad"));
             }
         }
 
@@ -486,10 +485,10 @@ namespace ScreenSwitch
         {
             for (;;)
             {
-                string a = Ask("对方的主机名或 IP（例如 my-mac.local 或 192.168.1.20" + (def.Length > 0 ? "，回车 = " + def : "") + "）：").Trim();
+                string a = Ask(Tr.T("setup.ask-host", def.Length > 0 ? Tr.T("setup.or-enter", def) : "")).Trim();
                 if (a.Length == 0 && def.Length > 0) return def;
                 if (ValidHost(a)) return a;
-                Say("主机名不能为空，只能用字母、数字、点和连字符。");
+                Say(Tr.T("setup.host-bad"));
             }
         }
 
@@ -497,11 +496,11 @@ namespace ScreenSwitch
         {
             for (;;)
             {
-                string a = Ask("对方的用户名（在对方电脑上运行 whoami 可以看到" + (def.Length > 0 ? "，回车 = " + def : "") + "）：").Trim();
+                string a = Ask(Tr.T("setup.ask-user", def.Length > 0 ? Tr.T("setup.or-enter", def) : "")).Trim();
                 if (a.Length == 0 && def.Length > 0) return def;
                 string u = CleanUser(a);
                 if (u != null) return u;
-                Say("用户名不能为空，也不能有空格、引号、@ 等符号。");
+                Say(Tr.T("setup.user-bad"));
             }
         }
 
@@ -526,23 +525,23 @@ namespace ScreenSwitch
             }
             if (list.Count == 0) return false;
             cfg.Devices = list;
-            Say("其他设备（采用 " + cfg.PeerName + " 上的设置）：");
+            Say(Tr.T("setup.adopt-head", cfg.PeerName));
             foreach (Device d in list) Say("  " + d.Code + "  " + d.Name);
-            Say("要改名或增删，运行 ScreenSwitchCli.exe setup devices。");
+            Say(Tr.T("setup.adopt-hint"));
             return true;
         }
 
         void DevicesOnly(Config cfg)
         {
             if (Blank(cfg.MainEdid) || cfg.MainEdid == Config.Placeholder)
-                throw new Stopped("还没有设置主屏：请先运行 ScreenSwitchCli.exe setup。");
+                throw new Stopped(Tr.T("setup.no-main-yet"));
             EditDevices(cfg);
         }
 
         // 逐个改名或删除已有的设备，再添加新的。已有设备的快捷键不动。
         void EditDevices(Config cfg)
         {
-            Say("其他设备（游戏机等，接在主屏别的输入口上）：");
+            Say(Tr.T("setup.devices-head"));
             ShowInputCodes(cfg);
 
             foreach (Device d in cfg.Devices.ToArray())
@@ -550,46 +549,46 @@ namespace ScreenSwitch
                 if (d.Code == cfg.SelfCode || d.Code == cfg.PeerCode)
                 {
                     cfg.Devices.Remove(d);
-                    Say("设备“" + d.Name + "”的编码 " + d.Code + " 是" + (d.Code == cfg.SelfCode ? "本机" : cfg.PeerName) + "的，已去掉。");
+                    Say(d.Code == cfg.SelfCode ? Tr.T("setup.dev-dropped-self", d.Name, d.Code) : Tr.T("setup.dev-dropped-peer", d.Name, d.Code, cfg.PeerName));
                     continue;
                 }
-                string a = Ask("设备“" + d.Name + "”（编码 " + d.Code + "）的新名字（回车 = 不改，- = 删除）：").Trim();
+                string a = Ask(Tr.T("setup.ask-dev-name", d.Name, d.Code)).Trim();
                 if (a == "-")
                 {
                     cfg.Devices.Remove(d);
-                    Say("已删除“" + d.Name + "”。");
+                    Say(Tr.T("setup.dev-deleted", d.Name));
                 }
                 else if (a.Length > 0) d.Name = a;
             }
 
             for (;;)
             {
-                string s = Ask("要添加的设备的输入口编码（1–255，回车 = 结束）：").Trim();
+                string s = Ask(Tr.T("setup.ask-dev-code")).Trim();
                 if (s.Length == 0) break;
                 uint code;
                 if (!Cli.ParseCode(s, out code))
                 {
-                    Say("编码要写十进制数字，1 到 255。");
+                    Say(Tr.T("setup.code-bad"));
                     continue;
                 }
                 if (code == cfg.SelfCode)
                 {
-                    Say(code + " 是本机的编码，不能再给设备用。");
+                    Say(Tr.T("setup.code-is-self", code));
                     continue;
                 }
                 if (code == cfg.PeerCode)
                 {
-                    Say(code + " 是 " + cfg.PeerName + " 的编码，不能再给设备用。");
+                    Say(Tr.T("setup.code-is-peer", code, cfg.PeerName));
                     continue;
                 }
                 Device taken = cfg.FindDevice(code);
                 if (taken != null)
                 {
-                    Say("编码 " + code + " 已经是设备“" + taken.Name + "”。");
+                    Say(Tr.T("setup.code-taken", code, taken.Name));
                     continue;
                 }
                 string def = FreeDeviceName(cfg);
-                string name = Ask("它的名字（回车 = " + def + "，- = 不加了）：").Trim();
+                string name = Ask(Tr.T("setup.ask-new-dev-name", def)).Trim();
                 if (name == "-") continue;
                 cfg.Devices.Add(new Device(name.Length > 0 ? name : def, code));
             }
@@ -609,11 +608,11 @@ namespace ScreenSwitch
         // 列出主屏 capabilities 里 0x60 支持的取值和标准含义，去掉本机和对方已用的
         void ShowInputCodes(Config cfg)
         {
-            Say("正在读取主屏支持的输入口（要几秒）…");
+            Say(Tr.T("setup.reading-inputs"));
             List<uint> codes = env.InputCodes(cfg.MainEdid);
             if (codes == null)
             {
-                Say("读不到主屏支持哪些输入口，请直接输入编码。常见的：15 = DisplayPort 1，16 = DisplayPort 2，17 = HDMI 1，18 = HDMI 2。");
+                Say(Tr.T("setup.inputs-unknown"));
                 return;
             }
             var lines = new List<string>();
@@ -623,15 +622,15 @@ namespace ScreenSwitch
                 string line = "  " + code;
                 if (InputName(code).Length > 0) line += "  " + InputName(code);
                 Device d = cfg.FindDevice(code);
-                if (d != null) line += "  （已有设备“" + d.Name + "”）";
+                if (d != null) line += Tr.T("setup.input-has-device", d.Name);
                 lines.Add(line);
             }
             if (lines.Count == 0)
             {
-                Say("主屏没有报告别的输入口，请直接输入编码。");
+                Say(Tr.T("setup.inputs-none"));
                 return;
             }
-            Say("主屏支持的输入口编码（本机和对方的已去掉）：");
+            Say(Tr.T("setup.inputs-head"));
             foreach (string line in lines) Say(line);
         }
 
@@ -647,7 +646,7 @@ namespace ScreenSwitch
             catch (Exception e)
             {
                 if (!(e is IOException) && !(e is UnauthorizedAccessException)) throw;
-                Say("写不了 " + configPath + "：" + e.Message);
+                Say(Tr.T("setup.write-failed", configPath, e.Message));
                 return 1;
             }
             // 重新设置过：清掉"直接切换从未成功"的记录（设计文档 6.3），让托盘程序重新试
@@ -658,13 +657,13 @@ namespace ScreenSwitch
                 catch (UnauthorizedAccessException) { }
             }
             Say("");
-            Say("已写入 " + configPath);
+            Say(Tr.T("setup.written", configPath));
             switch (env.RestartTray())
             {
-                case TrayRestart.Restarted: Say("托盘程序已重启。"); break;
-                case TrayRestart.Started: Say("托盘程序已启动。"); break;
-                case TrayRestart.Missing: Say("程序旁边没有 ScreenSwitch.exe，没有重启托盘程序。"); break;
-                default: Say("托盘程序没能重启：请退出后重新运行 ScreenSwitch.exe。"); break;
+                case TrayRestart.Restarted: Say(Tr.T("setup.tray-restarted")); break;
+                case TrayRestart.Started: Say(Tr.T("setup.tray-started")); break;
+                case TrayRestart.Missing: Say(Tr.T("setup.tray-missing")); break;
+                default: Say(Tr.T("setup.tray-failed")); break;
             }
             Say(Summary(cfg));
             return 0;
@@ -672,14 +671,18 @@ namespace ScreenSwitch
 
         static string Summary(Config cfg)
         {
-            var sb = new StringBuilder("设置完成：主屏 " + cfg.MainEdid + "，本机 " + cfg.SelfName + "（编码 " + cfg.SelfCode + "），");
-            sb.Append(cfg.LayoutNone ? "只有主屏" : "主屏加另一块屏");
-            sb.Append(cfg.PeerConfigured ? "，对方 " + cfg.PeerName + "（编码 " + (cfg.PeerCode == 0 ? "未知" : cfg.PeerCode.ToString(CultureInfo.InvariantCulture)) + "）" : "，没有配置对方");
-            if (cfg.Devices.Count == 0) return sb.Append("，没有其他设备。").ToString();
-            sb.Append("，设备 ");
-            for (int i = 0; i < cfg.Devices.Count; i++)
-                sb.Append(i > 0 ? "、" : "").Append(cfg.Devices[i].Name).Append("(").Append(cfg.Devices[i].Code).Append(")");
-            return sb.Append("。").ToString();
+            string peer = cfg.PeerConfigured
+                ? Tr.T("setup.summary-peer", cfg.PeerName, cfg.PeerCode == 0 ? Tr.T("setup.unknown") : cfg.PeerCode.ToString(CultureInfo.InvariantCulture))
+                : Tr.T("setup.summary-no-peer");
+            string devices = Tr.T("setup.summary-no-devices");
+            if (cfg.Devices.Count > 0)
+            {
+                var sb = new StringBuilder();
+                for (int i = 0; i < cfg.Devices.Count; i++)
+                    sb.Append(i > 0 ? Tr.T("list.sep") : "").Append(cfg.Devices[i].Name).Append("(").Append(cfg.Devices[i].Code).Append(")");
+                devices = Tr.T("setup.summary-devices", sb.ToString());
+            }
+            return Tr.T("setup.summary", cfg.MainEdid, cfg.SelfName, cfg.SelfCode, LayoutText(!cfg.LayoutNone), peer, devices);
         }
 
         // ---- 读写 ----
@@ -688,6 +691,8 @@ namespace ScreenSwitch
 
         string Ask(string prompt)
         {
+            // 英文提示以半角冒号结尾：冒号后补一个空格（中文提示以全角冒号结尾，不受影响）
+            if (prompt.EndsWith(":")) prompt += " ";
             output.Write(prompt);
             output.Flush();
             string s = input.ReadLine();

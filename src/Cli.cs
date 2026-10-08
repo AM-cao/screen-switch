@@ -254,41 +254,9 @@ namespace ScreenSwitch
                         return 0;
                     }
                 default:
-                    Console.WriteLine(Usage);
+                    Console.WriteLine(Tr.T("cli.usage").Replace("\n", "\r\n"));
                     return 1;
             }
         }
-
-        const string Usage =
-            "usage: ScreenSwitchCli.exe <command>\r\n" +
-            "  setup                             interactive setup (questions in Chinese): main screen, this computer, the other\r\n" +
-            "                                    computer, devices; writes config.json and restarts the tray app\r\n" +
-            "  setup devices                     only the device list: rename, delete, add\r\n" +
-            "  status                            all state as JSON (for agents)\r\n" +
-            "  detect [--main <model>]           detect the main screen, this computer's input and the screen combination\r\n" +
-            "  ports                             the main screen's inputs and what is connected to each (JSON)\r\n" +
-            "  peer set|clear|test               the other computer (set --os --host --user [--name])\r\n" +
-            "  pubkey                            print this computer's SSH public key (creates one if missing)\r\n" +
-            "  authorize \"<key>\"                 authorise the other computer's key (needs administrator)\r\n" +
-            "  device add|rename|remove          devices on the other inputs\r\n" +
-            "  set <key> <value>                 owned-layout, auto-save, direct-take, hotkey, after-take\r\n" +
-            "  autostart on|off                  start at login\r\n" +
-            "  request give peer                 ask the running tray app to switch the main screen to the other computer\r\n" +
-            "  request give code <n>             ... to the device on input code n (decimal, must be in the device list)\r\n" +
-            "  request give self                 ... or to re-apply this computer's layout\r\n" +
-            "                                    (exit 0 accepted, 2 not owned, 3 not running, 1 bad target / unknown device)\r\n" +
-            "  request take                      the other computer is about to switch here: restore the layout now (exit 0 ok, 3 not running)\r\n" +
-            "  request info                      print this computer's code, name and devices (one line, names in Base64)\r\n" +
-            "  diag                              list monitors and check DDC/CI on the main monitor\r\n" +
-            "  ddc-read                          read the main monitor's input source (VCP 0x60)\r\n" +
-            "  ddc-write <hex>                   switch the main monitor's input source\r\n" +
-            "  layout-show                       active display paths and current mode\r\n" +
-            "  layout-mode                       current mode and arrangement signatures (read-only)\r\n" +
-            "  layout-save                       save the current extended layout as the snapshot\r\n" +
-            "  layout-take                       apply the snapshot (extended, both screens)\r\n" +
-            "  layout-take-main                  main screen only (secondary off)\r\n" +
-            "  layout-release                    clone the secondary's desktop onto both screens\r\n" +
-            "  icon-dump <dir>                   write the tray icons as PNG files\r\n" +
-            "  ui-dump <dir> [zh|en]             draw the menu, settings and wizard to PNG files (demo data)";
     }
 }

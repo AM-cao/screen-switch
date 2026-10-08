@@ -95,7 +95,7 @@ namespace ScreenSwitch
             RegisterHotkeys();
             RebuildMenu();
 
-            if (cfg.LoadError != null) Notify("配置文件有误，已使用默认值", cfg.LoadError);
+            if (cfg.LoadError != null) Notify(Tr.T("tray.config-broken"), cfg.LoadError);
 
             timer = new System.Windows.Forms.Timer();
             timer.Interval = 500;
@@ -108,8 +108,8 @@ namespace ScreenSwitch
             {
                 if (orch.Owned)
                 {
-                    try { orch.SaveLayout(); Notify("已保存当前双屏布局", "以后拿回主屏时会恢复到这个布局"); }
-                    catch (Exception e) { Notify("保存布局失败", e.Message); }
+                    try { orch.SaveLayout(); Notify(Tr.T("tray.layout-saved"), Tr.T("tray.layout-saved.text")); }
+                    catch (Exception e) { Notify(Tr.T("tray.layout-save-failed"), e.Message); }
                 }
                 else Notify(Tr.T("notify.save-layout-first"), Tr.T("notify.save-layout-first.text"));
             }
@@ -169,7 +169,7 @@ namespace ScreenSwitch
             catch (Exception e)
             {
                 log.Error("reload: " + e);
-                Notify("重新加载配置失败", e.Message);
+                Notify(Tr.T("tray.reload-failed"), e.Message);
             }
             finally
             {

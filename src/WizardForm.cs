@@ -38,7 +38,7 @@ namespace ScreenSwitch
             return Tr.T("wizard.summary", c.MainEdid, Ports.Label(c.SelfCode),
                 c.LayoutNone ? Tr.T("screens.main-only") : Tr.T("screens.main-plus", "…"),
                 c.PeerConfigured ? c.PeerName : none,
-                devs.Count == 0 ? none : string.Join("、", devs.ToArray()));
+                devs.Count == 0 ? none : string.Join(Tr.T("list.sep"), devs.ToArray()));
         }
     }
 

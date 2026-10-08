@@ -49,7 +49,7 @@ namespace ScreenSwitch
         long layoutFailAt;
         bool retryDeferred;
 
-        const string HINT_BUTTON = "请用显示器上的按钮切换输入源";
+        static string HINT_BUTTON { get { return Tr.T("orch.hint-button"); } }
 
         public event Action OwnedChanged;
         // 布局拿回成功后回调（托盘程序用来执行 afterTake 命令）；失败时不调用
@@ -148,7 +148,7 @@ namespace ScreenSwitch
                     {
                         log.Error("take main-only: " + e.Message + ", falling back to extend");
                         layout.Take(OwnedLayout.Extend);
-                        notifier.Notify("无法关闭副屏，已按双屏扩展显示", e.Message);
+                        notifier.Notify(Tr.T("orch.main-only-failed"), e.Message);
                         applied = LayoutMode.Extend;
                     }
                 }
@@ -160,7 +160,7 @@ namespace ScreenSwitch
             catch (Exception e)
             {
                 log.Error("take: " + e.Message);
-                NotifyLayoutFailure("恢复布局失败", e.Message, retry);
+                NotifyLayoutFailure(Tr.T("orch.take-layout-failed"), e.Message, retry);
                 MarkLayoutFailed("take");
                 return LayoutMode.Missing;
             }
@@ -177,7 +177,7 @@ namespace ScreenSwitch
             catch (Exception e)
             {
                 log.Error("release: " + e.Message);
-                NotifyLayoutFailure("让出布局失败", e.Message, retry);
+                NotifyLayoutFailure(Tr.T("orch.release-layout-failed"), e.Message, retry);
                 // 让出失败而副屏还关着（仅主屏）：至少把副屏打开，别让本机没有能看到的屏幕
                 try
                 {
@@ -317,7 +317,7 @@ namespace ScreenSwitch
                 {
                     layout.SaveSnapshot();
                     log.Info("layout: arrangement auto-saved");
-                    notifier.Notify("已自动记住新的屏幕排列", "");
+                    notifier.Notify(Tr.T("orch.auto-saved"), "");
                 }
                 catch (Exception e) { log.Error("layout: auto-save failed: " + e.Message); }
             }
@@ -372,7 +372,7 @@ namespace ScreenSwitch
         {
             lock (gate)
             {
-                if (tracker.Owned) { DoTake(); notifier.Notify("主屏已在本机", ""); return; }
+                if (tracker.Owned) { DoTake(); notifier.Notify(Tr.T("orch.already-here"), ""); return; }
                 // 先直接切，再请对方代发（设计文档 6.3）：向主屏写本机编码，不等结果
                 bool direct = DirectWrite(cfg.SelfCode);
                 string why = NO_PEER;
@@ -387,9 +387,9 @@ namespace ScreenSwitch
                         LayoutMode applied = PreTakeLocked("takeback, peer accepted give peer");
                         // 按实际生效的布局写通知：仅主屏失败退回扩展时不能说"仅主屏"；只有主屏时没有布局可说
                         string body = cfg.LayoutNone ? ""
-                            : applied == LayoutMode.MainOnly ? "布局已切换为仅主屏"
-                            : applied == LayoutMode.Extend ? "布局已恢复为双屏" : "布局未能恢复";
-                        notifier.Notify("已请求 " + cfg.PeerName + " 交还主屏", body);
+                            : applied == LayoutMode.MainOnly ? Tr.T("orch.layout-main-only")
+                            : applied == LayoutMode.Extend ? Tr.T("orch.layout-extend") : Tr.T("orch.layout-not-restored");
+                        notifier.Notify(Tr.T("orch.asked-give-back", cfg.PeerName), body);
                         return;
                     }
                     why = PeerFailed(rc);
@@ -411,13 +411,13 @@ namespace ScreenSwitch
             }
         }
 
-        const string NO_PEER = "没有配置对方电脑";
+        static string NO_PEER { get { return Tr.T("orch.no-peer"); } }
         // 直接写入之后最多等这么久确认（每 0.5 秒读一次）
         const int DIRECT_CONFIRM_MS = 3000;
 
         string PeerFailed(int rc)
         {
-            return "主屏在其他设备上，或 " + cfg.PeerName + " 不在线（" + rc + "）";
+            return Tr.T("orch.peer-failed", cfg.PeerName, rc);
         }
 
         // 未占有时直接向主屏写输入口编码（directTake 关着、编码未知时不写）。有的显示器在非活跃口上也接受
@@ -475,7 +475,7 @@ namespace ScreenSwitch
                 pendingSig = null;
                 log.Info("prefs: ownedLayout=" + Prefs.Name(v));
                 if (tracker.Owned) DoTake();
-                else notifier.Notify("拿回后的布局已更改", "下次拿回主屏时生效");
+                else notifier.Notify(Tr.T("orch.layout-pref-changed"), Tr.T("orch.layout-pref-changed.text"));
             }
         }
 
@@ -548,7 +548,7 @@ namespace ScreenSwitch
             }
             cloned = false;
             log.Error("give: secondary not restored (mode " + m + "), cancelled");
-            notifier.Notify("无法恢复副屏，已取消切换", "副屏没有亮起来，主屏留在本机");
+            notifier.Notify(Tr.T("orch.second-not-restored"), Tr.T("orch.second-not-restored.text"));
             // 走到这里时回退扩展一定已经调用过（release() 报错且拓扑没亮）。最终读数既不是入口时的仅主屏、也不是
             // 拿回后的布局（例如一直 Missing，扩展其实可能已生效）：拓扑状态不明，记为布局失败，由占有时的拿回重试
             // 恢复拿回后的布局（缺屏时推迟到拓扑恢复）。读数仍是仅主屏说明拓扑没被改动：与预设一致就不必恢复，
@@ -589,7 +589,7 @@ namespace ScreenSwitch
             {
                 if (cfg.PeerCode == 0 && !LearnPeerCode())
                 {
-                    notifier.Notify("不知道 " + cfg.PeerName + " 接在哪个输入口", "请运行设置");
+                    notifier.Notify(Tr.T("orch.peer-code-unknown", cfg.PeerName), Tr.T("orch.run-setup"));
                     return;
                 }
                 // 最先通知对方：它切布局（约 3 秒）与本机打开副屏、显示器切输入的时间重叠，越早越稳。
@@ -631,7 +631,7 @@ namespace ScreenSwitch
                     // 中继会占住 gate 约 8.5 秒：先刷新状态文件（见 TakeBack）
                     WriteState();
                     int rc = relay.RequestGiveCode(code);
-                    if (rc == 0) { notifier.Notify("已请求 " + cfg.PeerName + " 切给 " + name, ""); return; }
+                    if (rc == 0) { notifier.Notify(Tr.T("orch.asked-give-to", cfg.PeerName, name), ""); return; }
                     why = PeerFailed(rc);
                 }
                 uint v;
@@ -650,7 +650,7 @@ namespace ScreenSwitch
                 if (r != Give.Switched || !ReturnedWithin(15000)) return;
                 log.Info("no signal on 0x" + code.ToString("X") + ", monitor returned");
                 tracker.Reset(true); DoTake(); WriteState(); Fire();
-                notifier.Notify("没有检测到 " + name + " 的信号", "主屏留在本机");
+                notifier.Notify(Tr.T("orch.no-signal", name), Tr.T("orch.stays-here"));
             }
             finally { WriteState(); }
         }
@@ -687,7 +687,7 @@ namespace ScreenSwitch
         {
             LayoutMode m = layout.Mode;
             if (m != Want() && m != LayoutMode.Missing) { log.Info("give: not switched, restoring owned layout"); DoTake(); }
-            notifier.Notify("切换未生效", "显示器没有响应，主屏留在本机");
+            notifier.Notify(Tr.T("orch.not-switched"), Tr.T("orch.monitor-no-response"));
         }
 
         // 切给对方之前发 request take（设计文档 5.2），让对方预先恢复布局。尽力而为：结果只记日志，

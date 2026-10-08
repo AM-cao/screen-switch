@@ -144,3 +144,143 @@ wizard.done.text	点“完成”后保存设置并开始工作。以后可以在
 wizard.summary	主屏 {0}；这台电脑接在 {1}；{2}；对方电脑：{3}；设备：{4}	Main screen {0}; this computer uses {1}; {2}; other computer: {3}; devices: {4}
 wizard.summary.none	无	none
 wizard.config-broken	现有的配置文件读不了（{0}），完成后会另存为 config.json.bak。	The existing config.json cannot be read ({0}); it will be kept as config.json.bak when you finish.
+device.default	设备 {0}	Device {0}
+layout.need-two	需要恰好两块活动显示器，当前 {0} 块	Exactly two active displays are required; there are {0} now
+layout.is-clone	当前是克隆模式，请先切回扩展模式再保存	The displays are cloned; switch back to extend mode before saving
+layout.main-not-found	没有找到主屏 {0}	The main screen {0} was not found
+layout.corrupt	布局快照损坏，请在双屏状态下重新保存布局	The layout snapshot is damaged; save the layout again with both screens on
+layout.no-snapshot	布局快照不存在，请先在双屏状态下保存布局	There is no layout snapshot; save the layout first with both screens on
+layout.no-active-path	当前没有活动显示路径	There is no active display path
+layout.snap-main-not-found	快照中没有找到主屏 {0}	The main screen {0} is not in the snapshot
+layout.close-second-failed	关闭副屏失败 rc={0}	Could not turn off the second screen (rc={0})
+layout.not-main-only	关闭副屏后拓扑不是仅主屏（当前 {0}）	After turning off the second screen the layout is not main-only (it is {0})
+layout.snap-no-main	快照中没有找到主屏	The main screen is not in the snapshot
+layout.snap-main-no-source	快照中主屏没有源模式	The main screen has no source mode in the snapshot
+layout.snap-main-no-target	快照中主屏没有目标模式	The main screen has no target mode in the snapshot
+layout.snap-second-no-target	快照中副屏没有目标模式	The second screen has no target mode in the snapshot
+layout.snap-second-no-source	快照中副屏没有源模式（release 为 0 时要用它的分辨率）	The second screen has no source mode in the snapshot (its resolution is needed when release is 0)
+layout.fallback-failed	DisplaySwitch {0} 失败: {1}	DisplaySwitch {0} failed: {1}
+layout.fallback-unchanged	回退切换失败：拓扑未改变	The fallback switch failed: the layout did not change
+layout.bad-source-index	显示路径的源模式索引无效：{0}	The display path has an invalid source mode index: {0}
+orch.hint-button	请用显示器上的按钮切换输入源	Use the buttons on the monitor to switch the input
+orch.main-only-failed	无法关闭副屏，已按双屏扩展显示	Could not turn off the second screen; showing both screens extended
+orch.take-layout-failed	恢复布局失败	Could not restore the layout
+orch.release-layout-failed	让出布局失败	Could not hand over the layout
+orch.auto-saved	已自动记住新的屏幕排列	The new screen arrangement was saved automatically
+orch.already-here	主屏已在本机	The main screen is already on this computer
+orch.layout-main-only	布局已切换为仅主屏	The layout is now main screen only
+orch.layout-extend	布局已恢复为双屏	The layout is back to both screens
+orch.layout-not-restored	布局未能恢复	The layout could not be restored
+orch.asked-give-back	已请求 {0} 交还主屏	Asked {0} to hand the main screen back
+orch.no-peer	没有配置对方电脑	No other computer is set up
+orch.peer-failed	主屏在其他设备上，或 {0} 不在线（{1}）	The main screen is on another device, or {0} is offline ({1})
+orch.layout-pref-changed	拿回后的布局已更改	The layout used after taking back was changed
+orch.layout-pref-changed.text	下次拿回主屏时生效	It takes effect the next time you take the main screen back
+orch.second-not-restored	无法恢复副屏，已取消切换	Could not bring the second screen back; switching was cancelled
+orch.second-not-restored.text	副屏没有亮起来，主屏留在本机	The second screen did not light up; the main screen stays here
+orch.peer-code-unknown	不知道 {0} 接在哪个输入口	It is not known which input {0} uses
+orch.run-setup	请运行设置	Run setup
+orch.asked-give-to	已请求 {0} 切给 {1}	Asked {0} to switch to {1}
+orch.no-signal	没有检测到 {0} 的信号	No signal from {0} was detected
+orch.stays-here	主屏留在本机	The main screen stays on this computer
+orch.not-switched	切换未生效	The switch did not take effect
+orch.monitor-no-response	显示器没有响应，主屏留在本机	The monitor did not respond; the main screen stays on this computer
+tray.config-broken	配置文件有误，已使用默认值	The config file has a problem; defaults are being used
+tray.layout-saved	已保存当前双屏布局	The current two-screen layout was saved
+tray.layout-saved.text	以后拿回主屏时会恢复到这个布局	It will be restored whenever you take the main screen back
+tray.layout-save-failed	保存布局失败	Could not save the layout
+tray.reload-failed	重新加载配置失败	Could not reload the config
+list.sep	、	, 
+setup.usage.all	用法：ScreenSwitchCli.exe setup            全部设置	usage: ScreenSwitchCli.exe setup            everything
+setup.usage.devices	      ScreenSwitchCli.exe setup devices    只改设备列表	       ScreenSwitchCli.exe setup devices    the device list only
+setup.config-unreadable	现有的 config.json 读不了（{0}），会重新生成，原文件另存为 config.json.bak。	The existing config.json cannot be read ({0}); a new one will be created and the old file saved as config.json.bak.
+setup.input-ended	输入结束了，配置没有改动。	The input ended; the config was not changed.
+setup.unchanged	配置没有改动。	The config was not changed.
+setup.no-ddc	没有显示器应答 DDC/CI，无法设置。可能的原因：\n  - 显示器自己的菜单（OSD）里没有打开 DDC/CI；\n  - 连接线、扩展坞或转接头不传 DDC；\n  - 有的显示器只在当前输入口应答，而主屏现在显示的是别的设备：把主屏切到这台电脑后再运行一次。	No monitor answers DDC/CI, so setup cannot continue. Possible reasons:\n  - DDC/CI is not turned on in the monitor's own menu (OSD);\n  - the cable, dock or adapter does not pass DDC;\n  - some monitors only answer on the input that is showing, and the main screen is showing another device: switch the main screen to this computer and run setup again.
+setup.intro	ScreenSwitch 设置。开始前请确认：主屏（两台电脑共用的那块显示器）正显示这台电脑的画面。	ScreenSwitch setup. Before you start, make sure the main screen (the monitor both computers share) is showing this computer.
+setup.monitors-head	已连接的显示器：	Connected monitors:
+setup.mon-ddc	  {0}. {1}：DDC/CI 有应答，当前输入口编码 {2}	  {0}. {1}: answers DDC/CI, current input code {2}
+setup.mon-noddc	  {0}. {1}：DDC/CI 没有应答	  {0}. {1}: does not answer DDC/CI
+setup.none-found	  （没有找到）	  (none found)
+setup.too-many	这台电脑接了 {0} 块屏。三块及以上的屏不支持：只留主屏，或主屏加另一块屏，然后再运行一次。	This computer has {0} screens. Three or more screens are not supported: keep only the main screen, or the main screen plus one more, then run setup again.
+setup.main-moved	原来设置的主屏是 {0}，它现在没有应答 DDC/CI（多半是正显示别的设备）；应答的只有 {1}。	The main screen was set to {0}, but it does not answer DDC/CI now (most likely it is showing another device); only {1} answers.
+setup.ask-swap-main	把主屏换成 {0} 吗？（y = 换，回车 = 不换）：	Make {0} the main screen? (y = yes, Enter = no):
+setup.switch-main-first	请把主屏切到这台电脑（用显示器上的按钮），再运行一次。	Switch the main screen to this computer (with the buttons on the monitor), then run setup again.
+setup.main-auto	主屏：{0}（只有它应答 DDC/CI，已自动选中）	Main screen: {0} (the only one that answers DDC/CI, chosen automatically)
+setup.main-maybe-other	如果主屏其实是另一块（它此刻正显示别的设备所以没有应答），请按 Ctrl+C 退出，把主屏切到这台电脑后再运行。	If the main screen is actually another one (it does not answer because it is showing another device right now), press Ctrl+C, switch the main screen to this computer and run setup again.
+setup.main-line	主屏：{0}	Main screen: {0}
+setup.self-code-zero	本机编码：读到的是 0，记为未知。	This computer's code: 0 was read, recorded as unknown.
+setup.self-code	本机编码：{0}	This computer's code: {0}
+setup.peer-code-cleared	原来记的对方编码也是 {0}，已清除。	The code remembered for the other computer was also {0}; it was cleared.
+setup.layout-line	屏幕组合：{0}	Screens: {0}
+setup.layout-second	主屏加另一块屏	main screen plus one more
+setup.layout-none	只有主屏	main screen only
+setup.ask-self-name	本机名字 [{0}]（回车 = 不改）：	Name of this computer [{0}] (Enter = keep):
+setup.unknown-monitor	未知显示器	Unknown monitor
+setup.label-paren	{0}（{1}）	{0} ({1})
+setup.choose-main	有几块显示器应答 DDC/CI。主屏是哪一块？输入序号{0}：	Several monitors answer DDC/CI. Which one is the main screen? Enter its number{0}:
+setup.enter-default	（回车 = {0}）	 (Enter = {0})
+setup.bad-number	请输入列表里的序号。	Enter a number from the list.
+setup.main-no-ddc	这块显示器没有应答 DDC/CI，不能作主屏。	This monitor does not answer DDC/CI, so it cannot be the main screen.
+setup.peer-line	另一台电脑：{0}（{1}，{2}@{3}）	The other computer: {0} ({1}, {2}@{3})
+setup.ask-peer-keep	回车 = 保留，n = 重新填写，- = 不要对方：	Enter = keep, n = fill in again, - = no other computer:
+setup.peer-removed	已去掉对方：主屏不在本机时要用显示器上的按钮切回来。	The other computer was removed: when the main screen is elsewhere, use the buttons on the monitor to switch it back.
+setup.peer-keep-bad	请直接回车，或输入 n 或 -。	Press Enter, or type n or -.
+setup.ask-peer-now	现在设置另一台电脑吗？（y / n，回车 = y）：	Set up the other computer now? (y / n, Enter = y):
+setup.peer-skipped	已跳过。以后要设置，再运行一次 ScreenSwitchCli.exe setup。	Skipped. To set it up later, run ScreenSwitchCli.exe setup again.
+setup.ask-peer-name-default	对方的名字（回车 = 按系统叫 Windows 或 Mac）：	Name of the other computer (Enter = Windows or Mac, by its system):
+setup.ask-peer-name	对方的名字 [{0}]：	Name of the other computer [{0}]:
+setup.ssh-config	正在配置本机的 SSH（密钥和 ~/.ssh/config）…	Setting up SSH on this computer (key and ~/.ssh/config)...
+setup.ssh-script-missing	程序旁边没有 setup-client.ps1，这一步没有做。请在仓库目录里手动运行：	setup-client.ps1 is not next to the program, so this step was skipped. Run it by hand from the repository folder:
+setup.ssh-failed	SSH 配置没有成功（退出码 {0}）。可以稍后重新运行设置。	SSH setup did not succeed (exit code {0}). You can run setup again later.
+setup.key-missing	没有找到本机的 SSH 公钥（~/.ssh/id_ed25519.pub），{0} 暂时无法授权这台电脑。	This computer's SSH public key (~/.ssh/id_ed25519.pub) was not found, so {0} cannot authorize this computer yet.
+setup.key-own	本机的公钥：	This computer's public key:
+setup.key-run-windows	请在 {0} 上打开管理员 PowerShell，进入 ScreenSwitch 的安装目录，执行：	On {0}, open PowerShell as administrator, go to the ScreenSwitch folder and run:
+setup.key-run-mac	请在 {0} 的终端里执行：	On {0}, run this in a terminal:
+setup.key-continue	执行完后按回车继续（现在做不了也按回车）：	Press Enter when done (also press Enter if you cannot do it now):
+setup.asking-peer	正在询问 {0} …	Asking {0} ...
+setup.peer-unreachable-keep	没有连上 {0}，沿用已有的编码 {1}。	Could not reach {0}; keeping the code already saved ({1}).
+setup.peer-unreachable	没有连上 {0}：它接在哪个输入口还不知道。以后第一次切给它时，托盘程序会自动询问，不用再运行设置。	Could not reach {0}, so which input it uses is not known yet. The tray program will ask it automatically the first time you switch to it; there is no need to run setup again.
+setup.peer-no-code	{0} 还不知道自己接在哪个输入口（它那边还没有运行设置）。	{0} does not know yet which input it uses (setup has not been run there).
+setup.peer-same-code	{0} 报告的编码和本机相同（{1}）：其中一台运行设置时，主屏显示的不是它自己。请在那台电脑上重新运行设置。	{0} reports the same code as this computer ({1}): on one of them the main screen was not showing that computer when setup ran. Run setup again on that computer.
+setup.peer-code	{0} 的编码：{1}	Code of {0}: {1}
+setup.yes-no	请输入 y 或 n。	Enter y or n.
+setup.ask-os	对方的系统（1 = Windows，2 = Mac，回车 = {0}）：	System of the other computer (1 = Windows, 2 = Mac, Enter = {0}):
+setup.os-bad	请输入 1 或 2。	Enter 1 or 2.
+setup.ask-host	对方的主机名或 IP（例如 my-mac.local 或 192.168.1.20{0}）：	Host name or IP of the other computer (for example my-mac.local or 192.168.1.20{0}):
+setup.or-enter	，回车 = {0}	, Enter = {0}
+setup.host-bad	主机名不能为空，只能用字母、数字、点和连字符。	The host name cannot be empty and may only use letters, digits, dots and hyphens.
+setup.ask-user	对方的用户名（在对方电脑上运行 whoami 可以看到{0}）：	User name on the other computer (run whoami there to see it{0}):
+setup.user-bad	用户名不能为空，也不能有空格、引号、@ 等符号。	The user name cannot be empty or contain spaces, quotes, @ and similar characters.
+setup.adopt-head	其他设备（采用 {0} 上的设置）：	Other devices (taken from the settings on {0}):
+setup.adopt-hint	要改名或增删，运行 ScreenSwitchCli.exe setup devices。	To rename, add or remove devices, run ScreenSwitchCli.exe setup devices.
+setup.no-main-yet	还没有设置主屏：请先运行 ScreenSwitchCli.exe setup。	The main screen is not set up yet: run ScreenSwitchCli.exe setup first.
+setup.devices-head	其他设备（游戏机等，接在主屏别的输入口上）：	Other devices (game consoles and the like, on other inputs of the main screen):
+setup.dev-dropped-self	设备“{0}”的编码 {1} 是本机的，已去掉。	Device "{0}" uses code {1}, which belongs to this computer; it was removed.
+setup.dev-dropped-peer	设备“{0}”的编码 {1} 是{2}的，已去掉。	Device "{0}" uses code {1}, which belongs to {2}; it was removed.
+setup.ask-dev-name	设备“{0}”（编码 {1}）的新名字（回车 = 不改，- = 删除）：	New name for device "{0}" (code {1}) (Enter = keep, - = delete):
+setup.dev-deleted	已删除“{0}”。	Deleted "{0}".
+setup.ask-dev-code	要添加的设备的输入口编码（1–255，回车 = 结束）：	Input code of a device to add (1-255, Enter = finish):
+setup.code-bad	编码要写十进制数字，1 到 255。	The code must be a decimal number from 1 to 255.
+setup.code-is-self	{0} 是本机的编码，不能再给设备用。	{0} is the code of this computer and cannot be used for a device.
+setup.code-is-peer	{0} 是 {1} 的编码，不能再给设备用。	{0} is the code of {1} and cannot be used for a device.
+setup.code-taken	编码 {0} 已经是设备“{1}”。	Code {0} already belongs to the device "{1}".
+setup.ask-new-dev-name	它的名字（回车 = {0}，- = 不加了）：	Its name (Enter = {0}, - = do not add):
+setup.reading-inputs	正在读取主屏支持的输入口（要几秒）…	Reading the inputs the main screen supports (takes a few seconds)...
+setup.inputs-unknown	读不到主屏支持哪些输入口，请直接输入编码。常见的：15 = DisplayPort 1，16 = DisplayPort 2，17 = HDMI 1，18 = HDMI 2。	Could not read which inputs the main screen supports; enter the code directly. Common ones: 15 = DisplayPort 1, 16 = DisplayPort 2, 17 = HDMI 1, 18 = HDMI 2.
+setup.input-has-device	  （已有设备“{0}”）	  (existing device "{0}")
+setup.inputs-none	主屏没有报告别的输入口，请直接输入编码。	The main screen reported no other inputs; enter the code directly.
+setup.inputs-head	主屏支持的输入口编码（本机和对方的已去掉）：	Input codes the main screen supports (those of this computer and the other computer are left out):
+setup.write-failed	写不了 {0}：{1}	Cannot write {0}: {1}
+setup.written	已写入 {0}	Written to {0}
+setup.tray-restarted	托盘程序已重启。	The tray program was restarted.
+setup.tray-started	托盘程序已启动。	The tray program was started.
+setup.tray-missing	程序旁边没有 ScreenSwitch.exe，没有重启托盘程序。	ScreenSwitch.exe is not next to the program, so the tray program was not restarted.
+setup.tray-failed	托盘程序没能重启：请退出后重新运行 ScreenSwitch.exe。	The tray program could not be restarted: quit it and run ScreenSwitch.exe again.
+setup.summary	设置完成：主屏 {0}，本机 {1}（编码 {2}），{3}，{4}，{5}。	Setup complete: main screen {0}, this computer {1} (code {2}), {3}, {4}, {5}.
+setup.summary-peer	对方 {0}（编码 {1}）	other computer {0} (code {1})
+setup.summary-no-peer	没有配置对方	no other computer
+setup.summary-devices	设备 {0}	devices {0}
+setup.summary-no-devices	没有其他设备	no other devices
+setup.unknown	未知	unknown
+cli.usage	用法：ScreenSwitchCli.exe <命令>\n  setup                             交互式设置：主屏、本机、另一台电脑、\n                                    设备；写入 config.json 并重启托盘程序\n  setup devices                     只改设备列表：改名、删除、添加\n  status                            以 JSON 输出全部状态（给智能体用）\n  detect [--main <型号>]            检测主屏、本机所接的输入口和屏幕组合\n  ports                             主屏的各个输入口以及每个口接了什么（JSON）\n  peer set|clear|test               另一台电脑（set --os --host --user [--name]）\n  pubkey                            打印本机的 SSH 公钥（没有就生成一个）\n  authorize "<密钥>"                授权另一台电脑的密钥（需要管理员）\n  device add|rename|remove          接在其他输入口上的设备\n  set <键> <值>                     owned-layout、auto-save、direct-take、hotkey、after-take\n  autostart on|off                  登录时自动运行\n  request give peer                 请正在运行的托盘程序把主屏切给另一台电脑\n  request give code <n>             ……切给输入口编码为 n 的设备（十进制，必须在设备列表里）\n  request give self                 ……或重新应用本机的布局\n                                    （退出码 0 已接受，2 主屏不在本机，3 没有运行，1 目标有误 / 设备未知）\n  request take                      另一台电脑要切回这里：立即恢复布局（退出码 0 成功，3 没有运行）\n  request info                      打印本机的编码、名字和设备（一行，名字为 Base64）\n  diag                              列出显示器并检查主显示器的 DDC/CI\n  ddc-read                          读主显示器的输入源（VCP 0x60）\n  ddc-write <十六进制>              切换主显示器的输入源\n  layout-show                       当前的显示路径和模式\n  layout-mode                       当前模式和排列签名（只读）\n  layout-save                       把当前的扩展布局存为快照\n  layout-take                       应用快照（扩展，两块屏）\n  layout-take-main                  只留主屏（副屏关闭）\n  layout-release                    把副屏的桌面克隆到两块屏上\n  icon-dump <目录>                  把托盘图标写成 PNG 文件\n  ui-dump <目录> [zh|en]            把菜单、设置窗口和向导画成 PNG 文件（演示数据）	usage: ScreenSwitchCli.exe <command>\n  setup                             interactive setup: main screen, this computer, the other\n                                    computer, devices; writes config.json and restarts the tray app\n  setup devices                     only the device list: rename, delete, add\n  status                            all state as JSON (for agents)\n  detect [--main <model>]           detect the main screen, this computer's input and the screen combination\n  ports                             the main screen's inputs and what is connected to each (JSON)\n  peer set|clear|test               the other computer (set --os --host --user [--name])\n  pubkey                            print this computer's SSH public key (creates one if missing)\n  authorize "<key>"                 authorise the other computer's key (needs administrator)\n  device add|rename|remove          devices on the other inputs\n  set <key> <value>                 owned-layout, auto-save, direct-take, hotkey, after-take\n  autostart on|off                  start at login\n  request give peer                 ask the running tray app to switch the main screen to the other computer\n  request give code <n>             ... to the device on input code n (decimal, must be in the device list)\n  request give self                 ... or to re-apply this computer's layout\n                                    (exit 0 accepted, 2 not owned, 3 not running, 1 bad target / unknown device)\n  request take                      the other computer is about to switch here: restore the layout now (exit 0 ok, 3 not running)\n  request info                      print this computer's code, name and devices (one line, names in Base64)\n  diag                              list monitors and check DDC/CI on the main monitor\n  ddc-read                          read the main monitor's input source (VCP 0x60)\n  ddc-write <hex>                   switch the main monitor's input source\n  layout-show                       active display paths and current mode\n  layout-mode                       current mode and arrangement signatures (read-only)\n  layout-save                       save the current extended layout as the snapshot\n  layout-take                       apply the snapshot (extended, both screens)\n  layout-take-main                  main screen only (secondary off)\n  layout-release                    clone the secondary's desktop onto both screens\n  icon-dump <dir>                   write the tray icons as PNG files\n  ui-dump <dir> [zh|en]             draw the menu, settings and wizard to PNG files (demo data)
