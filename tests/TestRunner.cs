@@ -19,8 +19,10 @@ namespace ScreenSwitch.Tests
 
     public static class TestRunner
     {
+        [STAThread]
         public static int Main(string[] args)
         {
+            Tr.Use("zh");
             int pass = 0, fail = 0;
             foreach (Type t in Assembly.GetExecutingAssembly().GetTypes())
             {
