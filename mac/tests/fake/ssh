@@ -1,0 +1,14 @@
+#!/bin/bash
+# 测试用假 ssh：记录参数。
+# 普通模式：按 $FAKE_SSH_SLEEP 延迟后输出 $FAKE_SSH_OUT（如果有）、以 $FAKE_SSH_RC 退出。
+# 配对模式（$FAKE_PEER_ENV 指向一个环境文件）：把最后一个参数当作远端命令，在"对方"的环境里交给它的 ssh-gate 执行，
+# 输出和退出码原样返回——相当于真的连到了另一台电脑。
+echo "$(date +%T) ssh $*" >> $FAKE_DIR/ssh.log
+sleep ${FAKE_SSH_SLEEP:-0}
+if [ -n "${FAKE_PEER_ENV:-}" ] && [ -f "$FAKE_PEER_ENV" ]; then
+  cmd="${@: -1}"
+  ( . "$FAKE_PEER_ENV"; SSH_ORIGINAL_COMMAND="$cmd" /bin/bash "$FAKE_SRC" ssh-gate )
+  exit $?
+fi
+[ -n "${FAKE_SSH_OUT:-}" ] && printf '%s\n' "$FAKE_SSH_OUT"
+exit ${FAKE_SSH_RC:-0}

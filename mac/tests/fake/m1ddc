@@ -1,0 +1,47 @@
+#!/bin/bash
+# 测试用假 m1ddc。显示器当前输入口记在 ${FAKE_MON:-$FAKE_DIR}/input（配对测试里两台"电脑"共用一个 FAKE_MON）；
+# 本机所接的口是 ${FAKE_SELF:-15}。只有本机的口活跃时读得到真实值（输入源、亮度 90、最大亮度 100）；
+# 不活跃时返回与请求无关的垃圾（与实测一致）。
+# ${FAKE_MON}/all_inputs 存在时模拟"所有输入口都应答 DDC"的显示器：不活跃时也读得到真实输入源、也能写入。
+# $FAKE_DIR/stale 存在时模拟"睡醒后缓存里留着睡前的真实回复"：不活跃时输入源也读出本机编码。
+# 写入 $FAKE_NOSIGNAL 里的口时，$FAKE_JUMP 秒后模拟显示器跳回本机的口。
+# 写入记入 $FAKE_DIR/order.log（与 display-helper、displayplacer 共用，测调用顺序）；
+# $FAKE_DIR/ddc_set_fail 存在时写入失败（退出码 1）；$FAKE_DIR/ddc_stuck 存在时写入"成功"但显示器不切换；
+# $FAKE_DIR/absent_on_switch 存在时切走的同时主屏从系统拓扑里消失；$FAKE_DIR/slow_read 见下。
+S=$FAKE_DIR
+MON=${FAKE_MON:-$FAKE_DIR}
+ME=${FAKE_SELF:-15}
+if [ "$1 $2" = "display list" ]; then
+  echo "[1] (null) (11111111-2222-3333-4444-555555555555)"; echo "[2] P275MV (AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE)"
+  [ "$(cat $S/topology 2>/dev/null)" = ext ] && echo "[3] SIDE24 (EEEEEEEE-FFFF-0000-1111-222222222222)"
+  exit 0
+fi
+cur=$(cat $MON/input)
+all=0; [ -f $MON/all_inputs ] && all=1
+case "$3 $4" in
+  "get input")
+    # $S/slow_read 存在时本次读卡 4 秒（模拟读取跨过睡眠），期间 $S/slow_reading 存在
+    if [ -f $S/slow_read ]; then rm -f $S/slow_read; touch $S/slow_reading; sleep 4; rm -f $S/slow_reading; fi
+    # $S/glitch 里是计数：还大于 0 时本次读返回垃圾 99（模拟实测的串包读数），每读一次减一
+    if [ -s $S/glitch ] && [ "$(cat $S/glitch)" -gt 0 ] 2>/dev/null; then
+      echo $(( $(cat $S/glitch) - 1 )) > $S/glitch; echo 99
+    elif [ "$cur" = "$ME" ] || [ -f $S/stale ]; then echo $ME
+    elif [ $all = 1 ]; then echo "$cur"
+    else echo -7; fi ;;
+  "get luminance")
+    if [ "$cur" = "$ME" ] || [ $all = 1 ]; then echo 90; elif [ -f $S/stale ]; then echo $ME; else echo -7; fi ;;
+  "max luminance")
+    if [ "$cur" = "$ME" ] || [ $all = 1 ]; then echo 100; elif [ -f $S/stale ]; then echo 18; else echo -85; fi ;;
+  "set input")
+    echo "ddc set $5" >> $S/order.log
+    [ -f $S/ddc_set_fail ] && exit 1
+    echo "$5"
+    if { [ "$cur" = "$ME" ] || [ $all = 1 ]; } && [ ! -f $S/ddc_stuck ]; then
+      echo "$5" > $MON/input
+      [ -f $S/absent_on_switch ] && touch $S/absent
+      for n in $FAKE_NOSIGNAL; do
+        if [ "$n" = "$5" ]; then ( sleep ${FAKE_JUMP:-3}; [ "$(cat $MON/input)" = "$5" ] && echo $ME > $MON/input ) >/dev/null 2>&1 & fi
+      done
+    fi ;;
+esac
+exit 0

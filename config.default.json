@@ -1,0 +1,15 @@
+{
+  "mainEdid": "CHANGE_ME",
+  "layout": "second",
+  "self": { "name": "", "code": 0 },
+  "peer": {
+    "name": "", "os": "mac", "host": "", "user": "",
+    "code": 0, "program": "", "hotkey": "",
+    "keyPath": "", "timeoutSec": 3
+  },
+  "devices": [],
+  "directTake": true,
+  "pollMs": 2000, "debounce": 2, "sshExe": "ssh.exe",
+  "release": { "width": 0, "height": 0 },
+  "afterTake": { "command": "", "delayMs": 3000 }
+}

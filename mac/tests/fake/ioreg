@@ -1,0 +1,3 @@
+#!/bin/bash
+# 测试用假 ioreg：$FAKE_DIR/lid_closed 存在 = 笔记本合着盖子
+if [ -f $FAKE_DIR/lid_closed ]; then echo '    "AppleClamshellState" = Yes'; else echo '    "AppleClamshellState" = No'; fi

@@ -1,0 +1,57 @@
+#!/bin/bash
+# 测试用假 displayplacer：$FAKE_DIR/layout 记录 extend / mirror；$FAKE_DIR/extend_line 是当前扩展排列
+# （应用扩展参数时更新，测试也可直接改它模拟用户在系统设置里重排）。
+# $FAKE_DIR/topology 决定本机有哪些屏：没有这个文件或内容为 builtin = 主屏 + 笔记本自带屏（默认）；
+# ext = 主屏 + 另一块外接屏（没有自带屏，如 Mac mini）；solo = 只有主屏。
+# $FAKE_DIR/lid_closed 存在 = 合着盖子，自带屏不在列表里；$FAKE_DIR/second_unplugged 存在 = 外接的另一块屏没接着。
+S=$FAKE_DIR
+L=11111111-2222-3333-4444-555555555555; M=AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE; E=EEEEEEEE-FFFF-0000-1111-222222222222
+T=$(cat $S/topology 2>/dev/null); [ -n "$T" ] || T=builtin
+# gone = 另一块屏根本不在（合盖、没接着、没有）；second_on = 它此刻在显示器列表里（还要没被关掉）
+second_on=1; gone=0
+case "$T" in
+  builtin) SEC=$L; SECRES="res:1470x956 hz:60"; [ -f $S/lid_closed ] && gone=1; [ -f $S/laptop_off ] && second_on=0 ;;
+  ext)     SEC=$E; SECRES="res:1920x1080 hz:60"; [ -f $S/second_unplugged ] && gone=1 ;;
+  solo)    SEC=""; gone=1 ;;
+esac
+[ $gone = 1 ] && second_on=0
+if [ "$1" = list ]; then
+  if [ $second_on = 1 ]; then
+    echo "Persistent screen id: $SEC"
+    if [ "$T" = builtin ]; then echo "Type: MacBook built in screen"; else echo "Type: 24 inch external screen"; fi
+    echo "Resolution: 1470x956"
+  fi
+  if [ -f $S/absent ]; then
+    # $FAKE_DIR/absent：主屏不在系统拓扑里（在别的口上久了被系统移除），只剩另一块屏
+    echo
+    echo "displayplacer \"id:$SEC $SECRES color_depth:8 enabled:true scaling:on origin:(0,0) degree:0\""
+    exit 0
+  fi
+  echo "Persistent screen id: $M"; echo "Type: 27 inch external screen"
+  echo
+  if [ $gone = 1 ]; then
+    # 另一块屏不在（合盖、没接着或根本没有）：只剩主屏
+    echo "displayplacer \"id:$M res:2560x1440 hz:160 color_depth:8 enabled:true scaling:on origin:(0,0) degree:0\""
+  elif [ "$(cat $S/layout)" = mirror ]; then
+    echo "displayplacer \"id:$SEC+$M $SECRES color_depth:8 enabled:true scaling:on origin:(0,0) degree:0\""
+  elif [ $second_on = 0 ]; then
+    # 笔记本屏被关闭：只剩主屏
+    echo "displayplacer \"id:$M res:2560x1440 hz:160 color_depth:8 enabled:true scaling:on origin:(0,0) degree:0\""
+  elif [ -f $S/extend_line ]; then
+    cat $S/extend_line
+  else
+    echo "displayplacer \"id:$SEC $SECRES color_depth:8 enabled:true scaling:on origin:(0,0) degree:0\" \"id:$M res:1920x1080 hz:160 color_depth:8 enabled:true scaling:on origin:(-1920,0) degree:0\""
+  fi
+  exit 0
+fi
+echo "$(date +%T) displayplacer $*" >> $S/dp.log
+echo "displayplacer" >> $S/order.log
+if [ $second_on = 0 ] && [ -n "$SEC" ] && [ "${*#*$SEC}" != "$*" ]; then
+  echo "Unable to find screen $SEC - skipping changes for that screen"
+  case "$*" in *+*) exit 1 ;; esac
+fi
+case "$*" in
+  *+*) echo mirror > $S/layout ;;
+  *) echo extend > $S/layout
+     { printf 'displayplacer'; for a in "$@"; do printf ' "%s"' "$a"; done; echo; } > $S/extend_line ;;
+esac

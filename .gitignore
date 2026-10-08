@@ -1,0 +1,5 @@
+bin/
+*.log
+.DS_Store
+# 本机笔记：联调记录、主机名、IP 等不入库
+private/

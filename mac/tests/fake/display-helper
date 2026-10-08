@@ -1,0 +1,31 @@
+#!/bin/bash
+# 测试用假 display-helper：$FAKE_DIR/laptop_off 存在表示笔记本屏已关闭；$FAKE_DIR/helper_fail 存在时开关都失败；
+# $FAKE_DIR/solo_fail 存在时只有 solo（镜像→仅大屏合并操作）失败，用来测退回路径。
+# $FAKE_DIR/topology、lid_closed、second_unplugged 的含义见假 displayplacer。
+S=$FAKE_DIR
+T=$(cat $S/topology 2>/dev/null); [ -n "$T" ] || T=builtin
+# 改动布局的调用（含失败的）记入 $FAKE_DIR/order.log
+case "$1" in list|mode) ;; *) echo "helper $*" >> $S/order.log ;; esac
+case "$1" in
+  list) m=0
+        second_on=1
+        case "$T" in
+          builtin) { [ -f $S/laptop_off ] || [ -f $S/lid_closed ]; } && second_on=0 ;;
+          ext) [ -f $S/second_unplugged ] && second_on=0 ;;
+          solo) second_on=0 ;;
+        esac
+        [ "$(cat $S/layout 2>/dev/null)" = mirror ] && [ $second_on = 1 ] && m=1
+        [ -f $S/absent ] || echo "3 builtin=0 active=1 mirror=$m uuid=AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        if [ $second_on = 1 ]; then
+          if [ "$T" = builtin ]; then echo "1 builtin=1 active=1 mirror=$m uuid=11111111-2222-3333-4444-555555555555"
+          else echo "5 builtin=0 active=1 mirror=$m uuid=EEEEEEEE-FFFF-0000-1111-222222222222"; fi
+        fi ;;
+  # $FAKE_DIR/degraded：主屏正在重新枚举，模式列表里没有保存的模式（就绪探测失败）
+  mode) [ -f $S/degraded ] && exit 4; echo "current 1470x956@160"; echo "match $4x$5@$6" ;;
+  disable) [ -f $S/helper_fail ] && exit 4; echo "$(date +%T) disable $2" >> $S/helper.log; touch $S/laptop_off ;;
+  enable)  [ -f $S/helper_fail ] && exit 4; echo "$(date +%T) enable $2" >> $S/helper.log; rm -f $S/laptop_off ;;
+  enable-mirror) [ -f $S/helper_fail ] && exit 4; echo "$(date +%T) enable-mirror $2 $3" >> $S/helper.log; rm -f $S/laptop_off; echo mirror > $S/layout ;;
+  solo) { [ -f $S/helper_fail ] || [ -f $S/solo_fail ]; } && exit 4
+        echo "$(date +%T) solo $2 $3 $4 $5 $6 $7" >> $S/helper.log; touch $S/laptop_off; echo extend > $S/layout ;;
+  *) exit 64 ;;
+esac

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- 登录后启动菜单栏程序 ScreenSwitch.app；由 mac/install.sh 把 __HOME__ 替换为实际家目录后装到 ~/Library/LaunchAgents。
+     从菜单"退出"属正常退出，不会被拉起；崩溃时自动重启。 -->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.user.screenswitch-menu</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>__HOME__/Applications/ScreenSwitch.app/Contents/MacOS/ScreenSwitch</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<dict>
+		<key>SuccessfulExit</key>
+		<false/>
+	</dict>
+	<key>ThrottleInterval</key>
+	<integer>10</integer>
+	<key>LimitLoadToSessionType</key>
+	<string>Aqua</string>
+	<key>ProcessType</key>
+	<string>Interactive</string>
+	<key>StandardOutPath</key>
+	<string>__HOME__/screenctl/menu.log</string>
+	<key>StandardErrorPath</key>
+	<string>__HOME__/screenctl/menu.log</string>
+</dict>
+</plist>
