@@ -15,7 +15,10 @@ namespace ScreenSwitch
         readonly SettingsService svc;
         readonly ITrayHost host;
         readonly TabControl tabs = new TabControl { Dock = DockStyle.Fill };
-        readonly Label status = new Label { Dock = DockStyle.Bottom, AutoSize = false, Height = 28, Padding = new Padding(16, 6, 16, 0) };
+        // 多行错误也要完整显示：宽度封顶，高度随文字
+        readonly Label status = new Label { Dock = DockStyle.Bottom, AutoSize = true, MaximumSize = new Size(600, 0), MinimumSize = new Size(0, 28), Padding = new Padding(16, 6, 16, 6) };
+        // "高级"展开与否：整页重画后保持
+        bool advancedOpen;
 
         public SettingsForm(SettingsService svc, ITrayHost host)
         {
@@ -70,23 +73,60 @@ namespace ScreenSwitch
             tabs.TabPages.Add(page);
         }
 
-        // 设置写入后：成功则刷新整页，失败显示原因
-        void Done(string err)
+        // 只重画一页（别的页、选中的标签都不动）
+        void RebuildTab(string key)
         {
-            if (err != null) { Ui.Error(status, err); Rebuild(); Ui.Error(status, err); return; }
-            Rebuild();
+            if (IsDisposed) return;
+            string err;
+            Config c = svc.Load(out err);
+            foreach (TabPage p in tabs.TabPages)
+            {
+                if ((string)p.Tag != key) continue;
+                p.SuspendLayout();
+                while (p.Controls.Count > 0) { Control old = p.Controls[0]; p.Controls.Remove(old); old.Dispose(); }
+                p.Controls.Add(PageFor(key, c));
+                p.ResumeLayout();
+            }
         }
 
-        // 在后台做慢操作（读 capabilities、ssh），做完回到界面线程
-        void Background(Action work, Action then)
+        Control PageFor(string key, Config c)
+        {
+            switch (key)
+            {
+                case TabPorts: return PortsPage(c);
+                case TabPeer: return PeerPage(c);
+                case TabScreens: return ScreensPage(c);
+                case TabHotkeys: return HotkeysPage(c);
+                default: return GeneralPage(c);
+            }
+        }
+
+        // 晚一点再做（等当前控件的事件处理完；事件里不能把触发事件的控件销毁）
+        void Later(Action a)
+        {
+            try { if (!IsDisposed && IsHandleCreated) BeginInvoke(a); }
+            catch (InvalidOperationException) { }
+        }
+
+        // 设置写入后：成功只清掉状态行（改动已生效，页面不动）；失败显示原因，并只把这一页恢复成配置里的样子
+        void Done(string err, string tab)
+        {
+            if (err == null) { Ui.Ok(status, ""); return; }
+            Ui.Error(status, err);
+            Later(delegate { RebuildTab(tab); Ui.Error(status, err); });
+        }
+
+        // 在后台做慢操作（读 capabilities、ssh），做完回到界面线程；owner 已经被销毁（那一页重画过）就不回来
+        void Background(Control owner, Action work, Action then)
         {
             ThreadPool.QueueUserWorkItem(delegate
             {
                 Action back = then;
                 try { work(); }
                 catch (Exception e) { string m = e.Message; back = delegate { Ui.Error(status, m); }; }
+                Action guarded = delegate { if (!owner.IsDisposed) back(); };
                 // 窗口已经关了就不回来
-                try { if (!IsDisposed && IsHandleCreated) BeginInvoke(back); }
+                try { if (!IsDisposed && IsHandleCreated) BeginInvoke(guarded); }
                 catch (InvalidOperationException) { }
             });
         }
@@ -109,9 +149,9 @@ namespace ScreenSwitch
                 uint code = Ui.AskCode(this, Tr.T("ports.add.prompt"));
                 if (code != 0) table.AddPort(code);
             }));
-            table.Changed += delegate { Done(svc.SetPorts(table.GetRows())); };
+            table.Changed += delegate { Done(svc.SetPorts(table.GetRows()), TabPorts); };
             PortsResult result = null;
-            Background(delegate { result = svc.ReadPorts(c); }, delegate
+            Background(table, delegate { result = svc.ReadPorts(c); }, delegate
             {
                 table.SetRows(result.Rows);
                 note.Text = result.MonitorKnown ? "" : Tr.T("ports.unknown");
@@ -122,7 +162,7 @@ namespace ScreenSwitch
         void RunDetect(string model)
         {
             DetectResult r = null;
-            Background(delegate { r = svc.Detect(model); }, delegate
+            Background(this, delegate { r = svc.Detect(model); }, delegate
             {
                 if (r.Error != null && r.Candidates.Count > 1 && model == null)
                 {
@@ -130,7 +170,10 @@ namespace ScreenSwitch
                     if (chosen != null) RunDetect(chosen);
                     return;
                 }
-                Done(r.Error);
+                if (r.Error != null) { Ui.Error(status, r.Error); return; }
+                Ui.Ok(status, "");
+                // 主屏或输入口变了：这两页重读（等当前处理完再画）
+                Later(delegate { RebuildTab(TabPorts); RebuildTab(TabScreens); });
             });
         }
 
@@ -146,7 +189,7 @@ namespace ScreenSwitch
                 list.SelectedIndex = 0;
                 col.Controls.Add(list);
                 var row = Ui.Row();
-                var ok = new Button { Text = "OK", DialogResult = DialogResult.OK, AutoSize = true };
+                var ok = new Button { Text = Tr.T("common.ok"), DialogResult = DialogResult.OK, AutoSize = true };
                 var cancel = new Button { Text = Tr.T("wizard.cancel"), DialogResult = DialogResult.Cancel, AutoSize = true };
                 row.Controls.Add(ok); row.Controls.Add(cancel);
                 col.Controls.Add(row);
@@ -165,7 +208,7 @@ namespace ScreenSwitch
             var panel = new PeerPanel();
             string key = null;
             panel.SetValues(c, "");
-            Background(delegate { key = svc.PublicKey(); }, delegate { panel.MyKeyBox.Text = key ?? ""; });
+            Background(panel, delegate { key = svc.PublicKey(); }, delegate { panel.MyKeyBox.Text = key ?? ""; });
             panel.FieldsCommitted += delegate
             {
                 if (panel.PeerHost.Length == 0 || panel.PeerUser.Length == 0) return;
@@ -178,7 +221,7 @@ namespace ScreenSwitch
             panel.AuthorizeClicked += delegate
             {
                 string theirs = panel.PeerKeyBox.Text, err = null, output;
-                Background(delegate { err = svc.Authorize(theirs, true, out output); }, delegate
+                Background(panel, delegate { err = svc.Authorize(theirs, true, out output); }, delegate
                 {
                     if (err != null) Ui.Error(panel.AuthLabel, err); else Ui.Ok(panel.AuthLabel, Tr.T("peer.authorized"));
                 });
@@ -187,11 +230,17 @@ namespace ScreenSwitch
             {
                 Ui.Ok(panel.TestLabel, Tr.T("peer.testing"));
                 PeerTestResult r = null;
-                Background(delegate { r = svc.TestPeer(); }, delegate { ShowTest(panel.TestLabel, r, svc); });
+                Background(panel, delegate { r = svc.TestPeer(); }, delegate { ShowTest(panel.TestLabel, r, svc); });
             };
             col.Controls.Add(panel);
             col.Controls.Add(Ui.Note(Tr.T("peer.skip-hint")));
-            col.Controls.Add(Ui.Button(Tr.T("peer.clear"), delegate { Done(svc.ClearPeer()); }));
+            col.Controls.Add(Ui.Button(Tr.T("peer.clear"), delegate
+            {
+                string err = svc.ClearPeer();
+                Done(err, TabPeer);
+                // 对方的地址和输入口都清掉了：这两页重画
+                if (err == null) Later(delegate { RebuildTab(TabPeer); RebuildTab(TabPorts); });
+            }));
             return col;
         }
 
@@ -218,7 +267,7 @@ namespace ScreenSwitch
             comboRow.Controls.Add(Ui.Button(Tr.T("ports.detect"), delegate { RunDetect(c.MainEdid); }));
             col.Controls.Add(comboRow);
             if (!c.LayoutNone)
-                Background(delegate { probe = svc.Probe(c.MainEdid); }, delegate
+                Background(combo, delegate { probe = svc.Probe(c.MainEdid); }, delegate
                 {
                     combo.Text = Tr.T("screens.combo", probe.Error == null && probe.OtherScreen.Length > 0 ? Tr.T("screens.main-plus", probe.OtherScreen) : Tr.T("screens.main-plus", "?"));
                 });
@@ -264,7 +313,14 @@ namespace ScreenSwitch
             var box = new HotkeyBox { Text = current ?? "" };
             var problem = Ui.Note("");
             if (!string.IsNullOrEmpty(current) && host.HotkeyProblems.Contains(current.Trim())) Ui.Error(problem, Tr.T("hotkeys.failed"));
-            Action commit = delegate { Done(svc.SetOption("hotkey", new string[] { target, box.Text.Length == 0 ? "none" : box.Text })); };
+            Action commit = delegate
+            {
+                string err = svc.SetOption("hotkey", new string[] { target, box.Text.Length == 0 ? "none" : box.Text });
+                Done(err, TabHotkeys);
+                // 写入配置时，运行中的托盘程序在进程内同步重载并重新登记快捷键（SettingsService.Reload）；
+                // 所以这里等一下再重画本页，读到的"没能注册的快捷键"才是新的
+                if (err == null) Later(delegate { RebuildTab(TabHotkeys); });
+            };
             box.Committed += commit;
             grid.Controls.Add(new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 7, 12, 0) }, 0, i);
             grid.Controls.Add(box, 1, i);
@@ -290,20 +346,21 @@ namespace ScreenSwitch
 
             var adv = Ui.Column();
             adv.Padding = new Padding(12, 0, 0, 0);
-            adv.Visible = false;
-            var toggle = Ui.Button(Tr.T("general.advanced") + " ▸", null);
+            adv.Visible = advancedOpen;
+            var toggle = Ui.Button(Tr.T("general.advanced") + (advancedOpen ? " ▾" : " ▸"), null);
             toggle.Click += delegate
             {
-                adv.Visible = !adv.Visible;
-                toggle.Text = Tr.T("general.advanced") + (adv.Visible ? " ▾" : " ▸");
+                advancedOpen = !advancedOpen;
+                adv.Visible = advancedOpen;
+                toggle.Text = Tr.T("general.advanced") + (advancedOpen ? " ▾" : " ▸");
             };
             col.Controls.Add(toggle);
             var direct = new CheckBox { Text = Tr.T("general.directtake"), AutoSize = true, Checked = c.DirectTake };
-            direct.CheckedChanged += delegate { Done(svc.SetOption("direct-take", new string[] { direct.Checked ? "on" : "off" })); };
+            direct.CheckedChanged += delegate { Done(svc.SetOption("direct-take", new string[] { direct.Checked ? "on" : "off" }), TabGeneral); };
             adv.Controls.Add(direct);
             adv.Controls.Add(Ui.Line(Tr.T("general.aftertake")));
             var after = new TextBox { Width = 480, Text = c.AfterTakeCommand };
-            Ui.OnCommit(after, delegate { Done(svc.SetOption("after-take", new string[] { after.Text })); });
+            Ui.OnCommit(after, delegate { Done(svc.SetOption("after-take", new string[] { after.Text }), TabGeneral); });
             adv.Controls.Add(after);
             adv.Controls.Add(Ui.Button(Tr.T("general.openfolder"), delegate
             {

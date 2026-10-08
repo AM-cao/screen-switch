@@ -104,3 +104,4 @@ general.aftertake	拿回主屏后执行的命令：	Command to run after taking 
 general.openfolder	打开配置文件所在的文件夹	Open the folder with the configuration
 wizard.cancel	取消	Cancel
 menu.give-to	切给 {0}	Switch to {0}
+common.ok	确定	OK

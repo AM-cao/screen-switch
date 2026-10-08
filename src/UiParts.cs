@@ -90,7 +90,7 @@ namespace ScreenSwitch
                 var num = new NumericUpDown { Minimum = 1, Maximum = 255, Value = 17, Width = 80 };
                 col.Controls.Add(num);
                 var row = Row();
-                var ok = new Button { Text = "OK", DialogResult = DialogResult.OK, AutoSize = true };
+                var ok = new Button { Text = Tr.T("common.ok"), DialogResult = DialogResult.OK, AutoSize = true };
                 var cancel = new Button { Text = Tr.T("wizard.cancel"), DialogResult = DialogResult.Cancel, AutoSize = true };
                 row.Controls.Add(ok); row.Controls.Add(cancel);
                 col.Controls.Add(row);
@@ -216,7 +216,8 @@ namespace ScreenSwitch
             keyRow.Controls.Add(Ui.Button(Tr.T("peer.copy"), delegate
             {
                 if (MyKeyBox.Text.Length == 0) return;
-                Clipboard.SetText(MyKeyBox.Text);
+                try { Clipboard.SetText(MyKeyBox.Text); }
+                catch (System.Runtime.InteropServices.ExternalException e) { Ui.Error(AuthLabel, e.Message); return; }
                 Ui.Ok(AuthLabel, Tr.T("peer.copied"));
             }));
             col.Controls.Add(keyRow);
