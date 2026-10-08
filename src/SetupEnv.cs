@@ -13,8 +13,9 @@ namespace ScreenSwitch
     {
         readonly string dir;
         readonly Log log;
-        List<SetupMonitor> monitors;
-        int connected;
+        // 最近一次探测到的块数；还没探测过为 -1。探测从窗口的后台线程来，加锁免得两次同时读显示器。
+        readonly object probeLock = new object();
+        int connected = -1;
 
         public SetupEnv(string dir)
         {
@@ -22,11 +23,31 @@ namespace ScreenSwitch
             log = new Log(Path.Combine(dir, "screenswitch.log"));
         }
 
-        // 已连接的显示器以 CCD 的全部路径为准（含没点亮的，与布局模块看到的一致）；
-        // 其中点亮的逐块读 VCP 0x60。CCD 查询失败时只列点亮的。
+        // 每次都重新探测（"重新检测"要看到刚插上、刚换口的显示器）；ConnectedCount() 用最近一次的块数
         public List<SetupMonitor> Monitors()
         {
-            if (monitors != null) return monitors;
+            lock (probeLock)
+            {
+                int n;
+                List<SetupMonitor> list = Probe(out n);
+                connected = n;
+                return list;
+            }
+        }
+
+        public int ConnectedCount()
+        {
+            lock (probeLock)
+            {
+                if (connected < 0) Monitors();
+                return connected;
+            }
+        }
+
+        // 已连接的显示器以 CCD 的全部路径为准（含没点亮的，与布局模块看到的一致）；
+        // 其中点亮的逐块读 VCP 0x60。CCD 查询失败时只列点亮的。
+        protected virtual List<SetupMonitor> Probe(out int count)
+        {
             List<MonitorProbe> probes = DxvaDdc.ProbeAll();
             string[] paths = null, names = null;
             try { CcdLayout.ConnectedTargets(out paths, out names); }
@@ -49,17 +70,10 @@ namespace ScreenSwitch
             foreach (MonitorProbe p in probes)
                 if (!used.Contains(p)) list.Add(new SetupMonitor(p.DeviceId, "", p.DdcOk, p.Input));
             // 块数以 CCD 为准；查询失败时退回点亮的块数
-            connected = paths != null ? paths.Length : list.Count;
+            count = paths != null ? paths.Length : list.Count;
             foreach (SetupMonitor m in list)
                 log.Info("setup: monitor " + m.DeviceId + " name=" + m.Name + " ddc=" + m.Ddc + " input=0x" + m.Input.ToString("X"));
-            monitors = list;
             return list;
-        }
-
-        public int ConnectedCount()
-        {
-            Monitors();
-            return connected;
         }
 
         public List<uint> InputCodes(string mainEdid)
@@ -90,22 +104,35 @@ namespace ScreenSwitch
         // 运行一个没有窗口的子进程，标准输出和标准错误按 UTF-8 合在一起读回来。启动不了、超时返回 255。
         static int RunUtf8(string exe, string args, int timeoutMs, out string output)
         {
+            string stdout;
+            return RunUtf8(exe, args, timeoutMs, false, out output, out stdout);
+        }
+
+        // closeStdin：标准输入接上并立刻关掉，子进程要问什么（口令、"覆盖吗？"）都读到结束，不会一直等。
+        // stdout 只有标准输出（ssh-keygen -y 的公钥要单独拿）。
+        static int RunUtf8(string exe, string args, int timeoutMs, bool closeStdin, out string output, out string stdout)
+        {
             var sb = new StringBuilder();
+            var so = new StringBuilder();
             int rc = 255;
             try
             {
                 var psi = new ProcessStartInfo(exe, args);
                 psi.UseShellExecute = false; psi.CreateNoWindow = true;
                 psi.RedirectStandardOutput = true; psi.RedirectStandardError = true;
+                psi.RedirectStandardInput = closeStdin;
                 psi.StandardOutputEncoding = Encoding.UTF8; psi.StandardErrorEncoding = Encoding.UTF8;
                 using (var p = Process.Start(psi))
                 {
-                    DataReceivedEventHandler collect = delegate(object s, DataReceivedEventArgs e)
+                    if (closeStdin) p.StandardInput.Close();
+                    p.OutputDataReceived += delegate(object s, DataReceivedEventArgs e)
+                    {
+                        if (e.Data != null) lock (sb) { sb.AppendLine(e.Data); so.AppendLine(e.Data); }
+                    };
+                    p.ErrorDataReceived += delegate(object s, DataReceivedEventArgs e)
                     {
                         if (e.Data != null) lock (sb) { sb.AppendLine(e.Data); }
                     };
-                    p.OutputDataReceived += collect;
-                    p.ErrorDataReceived += collect;
                     p.BeginOutputReadLine(); p.BeginErrorReadLine();
                     if (p.WaitForExit(timeoutMs))
                     {
@@ -116,7 +143,7 @@ namespace ScreenSwitch
                 }
             }
             catch (Exception) { rc = 255; }
-            lock (sb) { output = sb.ToString(); }
+            lock (sb) { output = sb.ToString(); stdout = so.ToString(); }
             return rc;
         }
 
@@ -145,13 +172,38 @@ namespace ScreenSwitch
                 Directory.CreateDirectory(sshDir);
                 string key = Path.Combine(sshDir, "id_ed25519");
                 string exe = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32\\OpenSSH\\ssh-keygen.exe");
-                string output;
-                int rc = RunUtf8(File.Exists(exe) ? exe : "ssh-keygen.exe",
-                    "-t ed25519 -N \"\" -f \"" + key + "\" -C screen-switch@" + Environment.MachineName, 30000, out output);
-                log.Info("setup: ssh-keygen -> " + rc);
+                // 私钥已在（只是没有 .pub）：绝不在它上面重新生成，只从私钥导出公钥写回 .pub
+                bool hasPrivate = File.Exists(key);
+                string output, stdout;
+                int rc = RunUtf8(File.Exists(exe) ? exe : "ssh-keygen.exe", KeygenArgs(key, hasPrivate, Environment.MachineName), 30000, true, out output, out stdout);
+                log.Info("setup: ssh-keygen " + (hasPrivate ? "-y" : "-t ed25519") + " -> " + rc);
+                if (hasPrivate)
+                {
+                    string pub = rc == 0 ? PubLine(stdout) : null;
+                    if (pub != null) File.WriteAllText(key + ".pub", pub + "\n");
+                    else log.Error("setup: could not derive the public key from the existing private key");
+                }
             }
             catch (Exception e) { log.Error("setup: ssh-keygen: " + e.Message); }
             return PublicKey();
+        }
+
+        // ssh-keygen 的参数：已有私钥只导出公钥（-y，输出在标准输出），没有才生成新的一对
+        public static string KeygenArgs(string key, bool privateExists, string machine)
+        {
+            if (privateExists) return "-y -f \"" + key + "\"";
+            return "-t ed25519 -N \"\" -f \"" + key + "\" -C screen-switch@" + machine;
+        }
+
+        // ssh-keygen -y 输出里的公钥那一行；没有返回 null
+        public static string PubLine(string stdout)
+        {
+            foreach (string line in (stdout ?? "").Split('\n'))
+            {
+                string l = line.Trim();
+                if (l.StartsWith("ssh-") && Setup.SafeKey(l) != null) return l;
+            }
+            return null;
         }
 
         public bool IsAdmin()

@@ -464,10 +464,11 @@ namespace ScreenSwitch
             }
         }
 
-        // 主机名和用户名会原样放进 ssh 的命令行和 ~/.ssh/config：只收不需要引号的写法
+        // 主机名和用户名会原样放进 ssh 的命令行和 ~/.ssh/config：只收不需要引号的写法；
+        // 以 - 开头的会被 ssh / PowerShell 当成选项，不收
         public static bool ValidHost(string host)
         {
-            return host != null && host.Length > 0 && Only(host, ".-_");
+            return host != null && host.Length > 0 && host[0] != '-' && Only(host, ".-_");
         }
 
         // Windows 的 whoami 输出"电脑名\用户名"：只要后半段。不合法返回 null。
@@ -476,7 +477,7 @@ namespace ScreenSwitch
             if (user == null) return null;
             string a = user.Trim();
             a = a.Substring(a.LastIndexOf('\\') + 1);
-            if (a.Length == 0) return null;
+            if (a.Length == 0 || a[0] == '-') return null;
             foreach (char ch in a) if (!char.IsLetterOrDigit(ch) && "._-".IndexOf(ch) < 0) return null;
             return a;
         }

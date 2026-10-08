@@ -190,6 +190,20 @@ namespace ScreenSwitch.Tests
             Directory.Delete(d, true);
         }
 
+        // Shift 单独不算修饰键（会吞掉正常打字的大写字母）：要带 Ctrl、Alt 或 Win
+        public static void Test_SetOption_HotkeyShiftAloneRejected()
+        {
+            string d = TempDir(); int r;
+            var s = Make(d, new FakeSetupEnv(), out r);
+            string err = s.SetOption("hotkey", new string[] { "peer", "Shift+Q" });
+            Assert.True(err != null && err.Contains("Shift+Q"), "shift alone rejected: " + err);
+            Assert.True(!err.Contains("Shift 或"), "message no longer offers Shift alone: " + err);
+            Assert.Eq("", Saved(d).PeerHotkey, "unchanged");
+            Assert.Eq(null, s.SetOption("hotkey", new string[] { "peer", "Shift+Win+Q" }), "shift with win ok");
+            Assert.Eq(null, s.SetOption("hotkey", new string[] { "17", "Ctrl+Shift+F5" }), "shift with ctrl ok");
+            Directory.Delete(d, true);
+        }
+
         public static void Test_SetOption_HotkeyDuplicateRejected()
         {
             string d = TempDir(); int r;
@@ -281,6 +295,26 @@ namespace ScreenSwitch.Tests
             Assert.Eq("MacBook", t.Name, "name");
             Assert.Eq(true, t.CodeSaved, "code saved");
             Assert.Eq((uint)15, Config.Load(Path.Combine(d, "config.json")).PeerCode, "in config");
+            Directory.Delete(d, true);
+        }
+
+        // 对方报的编码是本机的或某台设备的：不存（存了两个口会重名），配置不动
+        public static void Test_TestPeer_DoesNotSaveSelfOrDeviceCode()
+        {
+            string d = TempDir(); int r;
+            var env = new FakeSetupEnv();
+            var s = Make(d, env, out r);
+            env.Info = new PeerInfo(); env.Info.Name = "MacBook";
+            string before = File.ReadAllText(Path.Combine(d, "config.json"));
+            env.Info.Code = 17;
+            PeerTestResult t = s.TestPeer();
+            Assert.Eq(null, t.Error, "reached");
+            Assert.Eq(false, t.CodeSaved, "device's code not saved");
+            env.Info.Code = 16;
+            t = s.TestPeer();
+            Assert.Eq(false, t.CodeSaved, "own code not saved");
+            Assert.Eq(before, File.ReadAllText(Path.Combine(d, "config.json")), "config unchanged");
+            Assert.Eq(0, ReloadCounter(), "no reload");
             Directory.Delete(d, true);
         }
 

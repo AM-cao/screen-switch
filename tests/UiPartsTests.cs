@@ -33,5 +33,16 @@ namespace ScreenSwitch.Tests
             Assert.Eq("Switch", t.GetRows()[2].DeviceName, "table holds its own copies");
             t.Dispose();
         }
+
+        // 录快捷键：要带 Ctrl、Alt 或 Win；Shift 单独、没有修饰键、不支持的键都不收
+        public static void Test_HotkeyBox_ComboNeedsCtrlAltOrWin()
+        {
+            Assert.Eq(null, HotkeyBox.Combo(false, false, true, false, "Q"), "shift alone ignored");
+            Assert.Eq(null, HotkeyBox.Combo(false, false, false, false, "Q"), "no modifier ignored");
+            Assert.Eq(null, HotkeyBox.Combo(true, false, false, false, null), "unsupported key ignored");
+            Assert.Eq("Ctrl+Shift+Q", HotkeyBox.Combo(true, false, true, false, "Q"), "ctrl+shift");
+            Assert.Eq("Alt+1", HotkeyBox.Combo(false, true, false, false, "1"), "alt");
+            Assert.Eq("Shift+Win+F5", HotkeyBox.Combo(false, false, true, true, "F5"), "shift+win");
+        }
     }
 }

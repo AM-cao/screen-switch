@@ -696,5 +696,17 @@ namespace ScreenSwitch.Tests
             Assert.Eq("", c.AfterTakeCommand, "afterTake kept, empty");
             Assert.Eq(3000, c.AfterTakeDelayMs, "afterTake delay");
         }
+
+        // 地址和用户名会进 ssh / PowerShell 的参数：以 - 开头的会被当成选项
+        public static void Test_HostAndUser_RejectLeadingDash()
+        {
+            Assert.Eq(true, Setup.ValidHost("my-mac.local"), "dash inside is fine");
+            Assert.Eq(false, Setup.ValidHost("-oProxyCommand=x"), "leading dash host");
+            Assert.Eq(false, Setup.ValidHost("-x"), "leading dash host, short");
+            Assert.Eq("al-ice", Setup.CleanUser("al-ice"), "dash inside is fine");
+            Assert.Eq(null, Setup.CleanUser("-alice"), "leading dash user");
+            Assert.Eq(null, Setup.CleanUser("PC\\-alice"), "leading dash after the computer name");
+            Assert.Eq(null, Setup.CleanUser(" -alice "), "leading dash after trimming");
+        }
     }
 }

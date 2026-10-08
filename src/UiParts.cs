@@ -289,9 +289,17 @@ namespace ScreenSwitch
             }
             string key = KeyName(e.KeyCode);
             bool win = (GetKeyState(VK_LWIN) & 0x8000) != 0 || (GetKeyState(VK_RWIN) & 0x8000) != 0;
-            if (key == null || !(e.Control || e.Alt || e.Shift || win)) return;
-            Text = Format(e.Control, e.Alt, e.Shift, win, key);
+            string combo = Combo(e.Control, e.Alt, e.Shift, win, key);
+            if (combo == null) return;
+            Text = combo;
             if (Committed != null) Committed();
+        }
+
+        // 录下的组合；要带 Ctrl、Alt 或 Win（Shift 单独不算），键不支持也不收：返回 null
+        public static string Combo(bool ctrl, bool alt, bool shift, bool win, string key)
+        {
+            if (key == null || !(ctrl || alt || win)) return null;
+            return Format(ctrl, alt, shift, win, key);
         }
 
         public static string KeyName(Keys k)

@@ -180,7 +180,8 @@ namespace ScreenSwitch
             string hk = (combo ?? "").Trim();
             bool clear = hk.Length == 0 || hk.ToLowerInvariant() == "none";
             uint mods = 0, vk = 0;
-            if (!clear && (!TrayApp.ParseHotkey(hk, out mods, out vk) || mods == 0)) return Tr.T("err.hotkey.bad", hk);
+            // 要带 Ctrl(2)、Alt(1) 或 Win(8)：只有 Shift 的组合会吞掉正常打字
+            if (!clear && (!TrayApp.ParseHotkey(hk, out mods, out vk) || (mods & 0xB) == 0)) return Tr.T("err.hotkey.bad", hk);
             if (!clear) hk = Normalize(mods, vk);
             uint code = 0;
             if (target != "peer" && !Cli.ParseCode(target, out code)) return Bad("hotkey", target);
@@ -294,7 +295,8 @@ namespace ScreenSwitch
             var r = new PeerTestResult();
             if (err != null) { r.Error = err; return r; }
             r = TestPeerWith(c);
-            if (r.Error == null && r.Code != 0 && r.Code != c.SelfCode && r.Code != c.PeerCode)
+            // 本机或某台设备的编码不存：两个用途占同一个口，配置就乱了
+            if (r.Error == null && r.Code != 0 && r.Code != c.SelfCode && r.Code != c.PeerCode && c.FindDevice(r.Code) == null)
             {
                 uint code = r.Code;
                 r.CodeSaved = Edit(delegate(Config x) { x.PeerCode = code; return null; }) == null;
