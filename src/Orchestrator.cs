@@ -13,6 +13,14 @@ namespace ScreenSwitch
         public long Now() { return StateFile.Now(); }
     }
 
+    // 重新加载配置时从旧编排器交给新编排器的归属状态（见 Orchestrator.Handover）
+    public class OwnershipHandover
+    {
+        public bool Owned;
+        // 读失败不让出的宽限截止时间（StateFile.Now() 的秒）；没有宽限为 0
+        public long GraceUntil;
+    }
+
     public class Orchestrator
     {
         readonly IDdc ddc; readonly ILayout layout; readonly IRelay relay; readonly INotifier notifier; readonly IClock clock;
@@ -58,6 +66,14 @@ namespace ScreenSwitch
         public event Action ReloadRequested;
 
         public Orchestrator(IDdc ddc, ILayout layout, IRelay relay, INotifier notifier, IClock clock, Config cfg, Log log, string dir)
+            : this(ddc, layout, relay, notifier, clock, cfg, log, dir, null)
+        {
+        }
+
+        // handover 不为 null：重新加载配置，接手旧编排器的归属和宽限期——不读 DDC（切换刚结束时显示器可能还在
+        // 重新同步，一次读数不可靠），也不做启动对账（否则可能先让出、一秒后又拿回，afterTake 再跑一遍）。
+        // handover 为 null：启动，读一次 DDC 定归属并对账。
+        public Orchestrator(IDdc ddc, ILayout layout, IRelay relay, INotifier notifier, IClock clock, Config cfg, Log log, string dir, OwnershipHandover handover)
         {
             this.ddc = ddc; this.layout = layout; this.relay = relay; this.notifier = notifier; this.clock = clock;
             this.cfg = cfg; this.log = log; this.dir = dir;
@@ -66,13 +82,23 @@ namespace ScreenSwitch
             prefs = Prefs.Load(prefsPath);
             directRecord = new DirectRecord(dir);
             pollDivisor = Math.Max(1, cfg.PollMs / 500);
-            bool ok = Read();
+            bool ok = handover != null ? handover.Owned : Read();
+            if (handover != null) graceUntil = handover.GraceUntil;
             tracker = new OwnershipTracker(cfg.Debounce, ok);
             WriteState();
-            log.Info("orchestrator start, owned=" + ok);
+            log.Info((handover != null ? "orchestrator reloaded, owned=" : "orchestrator start, owned=") + ok);
             if (cfg.SelfCode == 0) log.Info("self.code is 0 (unknown): any successful DDC read counts as owning the main screen; run \"ScreenSwitchCli.exe setup\" to set it");
             log.Info("prefs: ownedLayout=" + Prefs.Name(prefs.OwnedLayout) + " autoSaveLayout=" + (prefs.AutoSaveLayout ? "true" : "false"));
-            Reconcile(ok);
+            if (handover == null) Reconcile(ok);
+        }
+
+        // 当前的归属和宽限期，交给重新加载后的新编排器。在界面线程上、不在切换中时调用（托盘程序的重新加载）。
+        public OwnershipHandover Handover()
+        {
+            var h = new OwnershipHandover();
+            h.Owned = tracker.Owned;
+            h.GraceUntil = Interlocked.Read(ref graceUntil);
+            return h;
         }
 
         // 启动时可能错过了一次切换：让实际拓扑与所有权对齐。

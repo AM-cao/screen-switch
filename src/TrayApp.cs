@@ -70,6 +70,8 @@ namespace ScreenSwitch
         bool externalReload;
         // 重新加载时读不了的 config.json 的错误说明（没替换运行核心）
         string rejectedConfigError;
+        // 没有布局快照的情况已经处理过（保存了或提示过）：重新加载时不再重复提示；有快照后复位
+        bool snapshotHandled;
         int busy;
 
         public TrayApp(string dir)
@@ -104,15 +106,23 @@ namespace ScreenSwitch
 
             // 还没设置过（主屏标识还是占位符）：先提示运行设置，别去提保存布局
             if (cfg.MainEdid == Config.Placeholder) form.BeginInvoke(new Action(OpenWizard));
-            else if (!layout.HasSnapshot)
+            else CheckSnapshot();
+        }
+
+        // 没有布局快照：占有时马上记住当前排列，未占有时提示先拿回再保存。启动时、每次重新加载成功后都看一次
+        // （向导或命令行 detect 设置完之后也要有快照，否则切走时一律"布局快照不存在"），同一次"没有快照"只处理一次。
+        void CheckSnapshot()
+        {
+            if (cfg.MainEdid == Config.Placeholder) return;
+            if (layout.HasSnapshot) { snapshotHandled = false; return; }
+            if (snapshotHandled) return;
+            snapshotHandled = true;
+            if (orch.Owned)
             {
-                if (orch.Owned)
-                {
-                    try { orch.SaveLayout(); Notify(Tr.T("tray.layout-saved"), Tr.T("tray.layout-saved.text")); }
-                    catch (Exception e) { Notify(Tr.T("tray.layout-save-failed"), e.Message); }
-                }
-                else Notify(Tr.T("notify.save-layout-first"), Tr.T("notify.save-layout-first.text"));
+                try { orch.SaveLayout(); Notify(Tr.T("tray.layout-saved"), Tr.T("tray.layout-saved.text")); }
+                catch (Exception e) { Notify(Tr.T("tray.layout-save-failed"), e.Message); }
             }
+            else Notify(Tr.T("notify.save-layout-first"), Tr.T("notify.save-layout-first.text"));
         }
 
         string ConfigPath { get { return Path.Combine(dir, "config.json"); } }
@@ -129,7 +139,11 @@ namespace ScreenSwitch
             var ddc = new DxvaDdc(newCfg.MainEdid, log);
             ILayout newLayout = Layouts.Create(newCfg, Path.Combine(dir, "layout-owned.bin"), log);
             var relay = new SshRelay(newCfg, log, dir);
-            var newOrch = new Orchestrator(ddc, newLayout, relay, new TrayNotifier(this), new RealClock(), newCfg, log, dir);
+            // 重新加载：接手旧编排器的归属和宽限期，不重新读 DDC、不对账（切换刚结束时一次读数不可靠）。
+            // 主屏或本机编码改了（向导、detect）时旧的归属说的是另一回事：照启动那样重新读。
+            OwnershipHandover handover = null;
+            if (!initial && orch != null && newCfg.MainEdid == cfg.MainEdid && newCfg.SelfCode == cfg.SelfCode) handover = orch.Handover();
+            var newOrch = new Orchestrator(ddc, newLayout, relay, new TrayNotifier(this), new RealClock(), newCfg, log, dir, handover);
             newOrch.OwnedChanged += delegate { form.BeginInvoke(new Action(RebuildMenu)); };
             newOrch.ReloadRequested += delegate { form.BeginInvoke(new Action(RequestReload)); };
             var afterTake = new AfterTakeRunner(newCfg.AfterTakeCommand, newCfg.AfterTakeDelayMs, log);
@@ -153,17 +167,19 @@ namespace ScreenSwitch
             if (reloadGate.Request(busy != 0)) ReloadEngine();
         }
 
-        // 重建失败时继续用旧的运行核心：快捷键和定时器在 finally 里恢复
+        // 重建失败时继续用旧的运行核心：快捷键和定时器在 finally 里恢复。
+        // 只在界面线程上调用：注册快捷键、菜单、图标、定时器都属于界面线程（设置窗口的后台操作经 BeginInvoke 过来）。
         void ReloadEngine()
         {
             bool refreshSettings = externalReload;
             externalReload = false;
+            bool rebuilt = false;
             timer.Stop();
             foreach (HotkeyBinding b in hotkeys) UnregisterHotKey(form.Handle, b.Id);
             hotkeys.Clear();
             try
             {
-                if (BuildEngine(false)) log.Info("config reloaded");
+                if (BuildEngine(false)) { rebuilt = true; log.Info("config reloaded"); }
                 else Notify(Tr.T("notify.config-kept"), rejectedConfigError);
             }
             catch (Exception e)
@@ -173,12 +189,20 @@ namespace ScreenSwitch
             }
             finally
             {
-                RegisterHotkeys();
-                RebuildMenu();
+                // 定时器先恢复：后面哪一步抛异常，托盘也照样轮询、照样回应对方
                 timer.Start();
+                try { RegisterHotkeys(); }
+                catch (Exception e) { log.Error("reload: hotkeys: " + e); }
+                try { RebuildMenu(); }
+                catch (Exception e) { log.Error("reload: menu: " + e); }
             }
-            // 设置窗口自己触发的重载在事件处理里同步走到这里：它只刷新受影响的页，这里不动。
-            // 命令行触发的才整个刷新，并且延后到当前消息处理完。
+            if (rebuilt)
+            {
+                try { CheckSnapshot(); }
+                catch (Exception e) { log.Error("reload: snapshot: " + e); }
+            }
+            // 设置窗口自己触发的重载（经 BeginInvoke 排在界面线程上）：它只刷新受影响的页，这里不动。
+            // 命令行、向导触发的才整个刷新，并且延后到当前消息处理完。
             if (refreshSettings) RefreshSettingsLater();
         }
 
@@ -261,8 +285,9 @@ namespace ScreenSwitch
             if (settings == null || settings.IsDisposed)
             {
                 var svc = new SettingsService(dir, new SetupEnv(dir), Autostart.ForCurrentUser(dir));
-                // 设置窗口自己改的配置：进程内重载，窗口自己刷新受影响的页（不走 externalReload）
-                svc.Reload = delegate { ReloadWhenIdle(); };
+                // 设置窗口自己改的配置：进程内重载，窗口自己刷新受影响的页（不走 externalReload）。
+                // 重新检测、测试连接在后台线程上写配置：重载一律转回界面线程
+                svc.Reload = delegate { if (UiAlive()) form.BeginInvoke(new Action(ReloadWhenIdle)); };
                 settings = new SettingsForm(svc, this);
                 settings.Show();
             }
@@ -297,7 +322,8 @@ namespace ScreenSwitch
             if (wizard == null || wizard.IsDisposed)
             {
                 var svc = new SettingsService(dir, new SetupEnv(dir), Autostart.ForCurrentUser(dir));
-                svc.Reload = delegate { ReloadWhenIdle(); };
+                // 向导写完配置：在界面线程上重载，开着的设置窗口整个重画（与命令行的 reload 一样）
+                svc.Reload = delegate { if (UiAlive()) form.BeginInvoke(new Action(RequestReload)); };
                 wizard = new WizardForm(svc);
                 wizard.Show();
             }
