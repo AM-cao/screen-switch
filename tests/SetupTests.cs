@@ -46,6 +46,9 @@ namespace ScreenSwitch.Tests
                 return Info;
             }
             public TrayRestart RestartTray() { Calls.Add("tray"); return Tray; }
+            public string GenerateKey() { return Key; }
+            public int AuthorizePeerKey(string safeKey, bool elevate, out string output) { output = ""; return 0; }
+            public bool IsAdmin() { return false; }
 
             public int Count(string prefix)
             {

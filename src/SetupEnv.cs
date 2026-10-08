@@ -134,6 +134,11 @@ namespace ScreenSwitch
             return null;
         }
 
+        // 占位，Task 5 换成真实现
+        public string GenerateKey() { return PublicKey(); }
+        public int AuthorizePeerKey(string safeKey, bool elevate, out string output) { output = ""; return 2; }
+        public bool IsAdmin() { return false; }
+
         public PeerInfo RequestInfo(Config cfg)
         {
             return new SshRelay(cfg, log, dir).RequestInfo();

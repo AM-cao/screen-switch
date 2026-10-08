@@ -40,6 +40,12 @@ namespace ScreenSwitch
         PeerInfo RequestInfo(Config cfg);
         // 重启与本程序同一目录的托盘程序
         TrayRestart RestartTray();
+        // 生成本机的 SSH 密钥对，返回公钥那一行；失败返回 null
+        string GenerateKey();
+        // 把对方的公钥放行到本机（elevate 为真时以管理员身份做）：0 成功，其余为失败；output 是脚本的输出
+        int AuthorizePeerKey(string safeKey, bool elevate, out string output);
+        // 当前进程是否以管理员身份运行
+        bool IsAdmin();
     }
 
     // 设置问答（设计文档第 9 节）：ScreenSwitchCli.exe setup / setup devices。
@@ -459,13 +465,29 @@ namespace ScreenSwitch
         }
 
         // 主机名和用户名会原样放进 ssh 的命令行和 ~/.ssh/config：只收不需要引号的写法
+        public static bool ValidHost(string host)
+        {
+            return host != null && host.Length > 0 && Only(host, ".-_");
+        }
+
+        // Windows 的 whoami 输出"电脑名\用户名"：只要后半段。不合法返回 null。
+        public static string CleanUser(string user)
+        {
+            if (user == null) return null;
+            string a = user.Trim();
+            a = a.Substring(a.LastIndexOf('\\') + 1);
+            if (a.Length == 0) return null;
+            foreach (char ch in a) if (!char.IsLetterOrDigit(ch) && "._-".IndexOf(ch) < 0) return null;
+            return a;
+        }
+
         string AskHost(string def)
         {
             for (;;)
             {
                 string a = Ask("对方的主机名或 IP（例如 my-mac.local 或 192.168.1.20" + (def.Length > 0 ? "，回车 = " + def : "") + "）：").Trim();
                 if (a.Length == 0 && def.Length > 0) return def;
-                if (a.Length > 0 && Only(a, ".-_")) return a;
+                if (ValidHost(a)) return a;
                 Say("主机名不能为空，只能用字母、数字、点和连字符。");
             }
         }
@@ -476,11 +498,8 @@ namespace ScreenSwitch
             {
                 string a = Ask("对方的用户名（在对方电脑上运行 whoami 可以看到" + (def.Length > 0 ? "，回车 = " + def : "") + "）：").Trim();
                 if (a.Length == 0 && def.Length > 0) return def;
-                // Windows 的 whoami 输出"电脑名\用户名"：只要后半段
-                a = a.Substring(a.LastIndexOf('\\') + 1);
-                bool ok = a.Length > 0;
-                foreach (char ch in a) if (!char.IsLetterOrDigit(ch) && "._-".IndexOf(ch) < 0) ok = false;
-                if (ok) return a;
+                string u = CleanUser(a);
+                if (u != null) return u;
                 Say("用户名不能为空，也不能有空格、引号、@ 等符号。");
             }
         }

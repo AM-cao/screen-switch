@@ -6,3 +6,20 @@ ports.err.duplicate	编码 {0} 出现了两次。	Code {0} appears twice.
 ports.err.self	这台电脑所接的口不能改；换了接口请重新检测主屏。	The port of this computer cannot be changed here; detect the main screen again if you moved the cable.
 ports.err.two-peers	只能有一个口接对方电脑。	Only one port can be the other computer.
 ports.err.name	请给 {0} 上的设备起个名字。	Please name the device on {0}.
+err.config.broken	配置文件读不了（{0}），先修好或删掉 config.json 再改设置。	config.json cannot be read ({0}); fix or delete it before changing settings.
+err.device.code	设备的编码要在 1 到 255 之间。	A device code must be between 1 and 255.
+err.device.name	请给设备起个名字。	Please give the device a name.
+err.device.self	{0} 是这台电脑所接的口，不能给设备用。	{0} is the port of this computer and cannot be a device.
+err.device.peer	{0} 是 {1} 所接的口，不能给设备用。	{0} is the port of {1} and cannot be a device.
+err.device.taken	编码 {0} 已经是设备“{1}”。	Code {0} is already the device "{1}".
+err.device.notfound	没有编码为 {0} 的设备。	There is no device with code {0}.
+err.peer.os	系统只能是 windows 或 mac。	The system must be windows or mac.
+err.peer.host	地址不能为空，只能用字母、数字、点、连字符和下划线。	The address cannot be empty and may only contain letters, digits, dots, hyphens and underscores.
+err.peer.user	用户名不能为空，也不能有空格、引号、@ 等符号。	The user name cannot be empty or contain spaces, quotes, @ and similar characters.
+err.option.unknown	不认识的设置项：{0}	Unknown setting: {0}
+err.option.value	{0} 的值不对：{1}	Invalid value for {0}: {1}
+err.hotkey.bad	快捷键写法不对：{0}（例如 Ctrl+Alt+1，要带 Ctrl、Alt、Shift 或 Win）	Invalid shortcut: {0} (for example Ctrl+Alt+1; it needs Ctrl, Alt, Shift or Win)
+err.hotkey.taken	{0} 已经用于“{1}”。	{0} is already used for "{1}".
+hotkey.target.peer	切给对方 / 拿回主屏	Switch to the other computer / take back
+err.autostart	开机自动运行没能设置：{0}	Could not change start at login: {0}
+peer.ssh.manual	程序旁边没有 setup-client.ps1，请在仓库目录里手动运行：powershell -ExecutionPolicy Bypass -File setup-client.ps1 -PeerUser {0} -PeerHost {1}	setup-client.ps1 is not next to the program; run it by hand in the repository folder: powershell -ExecutionPolicy Bypass -File setup-client.ps1 -PeerUser {0} -PeerHost {1}
