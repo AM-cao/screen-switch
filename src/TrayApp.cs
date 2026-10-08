@@ -114,18 +114,22 @@ namespace ScreenSwitch
         string ConfigPath { get { return Path.Combine(dir, "config.json"); } }
 
         // 运行核心：配置、DDC、布局、中继、编排器。重新加载配置时整个重建。
+        // 先全部建在局部变量里，建成功才替换字段；中途抛异常时字段保持旧值。
         void BuildEngine()
         {
-            cfg = Config.Load(ConfigPath);
-            if (cfg.LoadError != null) log.Error("config: " + cfg.LoadError);
-            var ddc = new DxvaDdc(cfg.MainEdid, log);
-            layout = Layouts.Create(cfg, Path.Combine(dir, "layout-owned.bin"), log);
-            var relay = new SshRelay(cfg, log, dir);
-            orch = new Orchestrator(ddc, layout, relay, new TrayNotifier(this), new RealClock(), cfg, log, dir);
-            orch.OwnedChanged += delegate { form.BeginInvoke(new Action(RebuildMenu)); };
-            orch.ReloadRequested += delegate { form.BeginInvoke(new Action(RequestReload)); };
-            var afterTake = new AfterTakeRunner(cfg.AfterTakeCommand, cfg.AfterTakeDelayMs, log);
-            orch.AfterTake = afterTake.Schedule;
+            Config newCfg = Config.Load(ConfigPath);
+            if (newCfg.LoadError != null) log.Error("config: " + newCfg.LoadError);
+            var ddc = new DxvaDdc(newCfg.MainEdid, log);
+            ILayout newLayout = Layouts.Create(newCfg, Path.Combine(dir, "layout-owned.bin"), log);
+            var relay = new SshRelay(newCfg, log, dir);
+            var newOrch = new Orchestrator(ddc, newLayout, relay, new TrayNotifier(this), new RealClock(), newCfg, log, dir);
+            newOrch.OwnedChanged += delegate { form.BeginInvoke(new Action(RebuildMenu)); };
+            newOrch.ReloadRequested += delegate { form.BeginInvoke(new Action(RequestReload)); };
+            var afterTake = new AfterTakeRunner(newCfg.AfterTakeCommand, newCfg.AfterTakeDelayMs, log);
+            newOrch.AfterTake = afterTake.Schedule;
+            cfg = newCfg;
+            layout = newLayout;
+            orch = newOrch;
         }
 
         // 配置改了：空闲时立即重建，正在切换时等切换结束（ReloadGate）
@@ -134,16 +138,29 @@ namespace ScreenSwitch
             if (reloadGate.Request(busy != 0)) ReloadEngine();
         }
 
+        // 重建失败时继续用旧的运行核心：快捷键和定时器在 finally 里恢复
         void ReloadEngine()
         {
             timer.Stop();
             foreach (HotkeyBinding b in hotkeys) UnregisterHotKey(form.Handle, b.Id);
             hotkeys.Clear();
-            BuildEngine();
-            RegisterHotkeys();
-            RebuildMenu();
-            timer.Start();
-            log.Info("config reloaded");
+            try
+            {
+                BuildEngine();
+                log.Info("config reloaded");
+                if (cfg.LoadError != null) Notify("配置文件有误，已使用默认值", cfg.LoadError);
+            }
+            catch (Exception e)
+            {
+                log.Error("reload: " + e);
+                Notify("重新加载配置失败", e.Message);
+            }
+            finally
+            {
+                RegisterHotkeys();
+                RebuildMenu();
+                timer.Start();
+            }
         }
 
         bool UiAlive() { return form != null && form.IsHandleCreated && !form.IsDisposed; }
@@ -173,7 +190,7 @@ namespace ScreenSwitch
                 finally
                 {
                     Interlocked.Exchange(ref busy, 0);
-                    if (UiAlive()) form.BeginInvoke(new Action(delegate { if (reloadGate.OnIdle()) ReloadEngine(); }));
+                    if (UiAlive()) form.BeginInvoke(new Action(delegate { if (Thread.VolatileRead(ref busy) == 0 && reloadGate.OnIdle()) ReloadEngine(); }));
                 }
             });
         }
