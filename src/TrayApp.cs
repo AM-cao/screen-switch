@@ -111,7 +111,7 @@ namespace ScreenSwitch
                     try { orch.SaveLayout(); Notify("已保存当前双屏布局", "以后拿回主屏时会恢复到这个布局"); }
                     catch (Exception e) { Notify("保存布局失败", e.Message); }
                 }
-                else Notify("请先在双屏状态下保存布局", "右键托盘图标选择“重新保存当前布局”");
+                else Notify(Tr.T("notify.save-layout-first"), Tr.T("notify.save-layout-first.text"));
             }
         }
 
@@ -164,7 +164,7 @@ namespace ScreenSwitch
             try
             {
                 if (BuildEngine(false)) log.Info("config reloaded");
-                else Notify("配置文件有误，已使用默认值", rejectedConfigError);
+                else Notify(Tr.T("notify.config-kept"), rejectedConfigError);
             }
             catch (Exception e)
             {

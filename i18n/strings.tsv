@@ -116,3 +116,6 @@ notify.busy	正在切换中	Switching in progress
 notify.busy.text	请等待当前操作完成	Please wait for the current switch to finish
 notify.failed	操作失败	Something went wrong
 notify.log-failed	打开日志失败	Could not open the log
+notify.config-kept	配置文件有误，改动没有生效	config.json has an error; the change was not applied
+notify.save-layout-first	请先在双屏状态下保存布局	Save the layout while both screens are on
+notify.save-layout-first.text	右键托盘图标，打开“设置…”，在“屏幕”页点“现在记住当前排列”。	Right-click the tray icon, open Settings…, and click "Remember the current arrangement now" on the Screens page.
