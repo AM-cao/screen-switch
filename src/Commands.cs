@@ -81,7 +81,10 @@ namespace ScreenSwitch
             if (r.Candidates.Count > 1)
             {
                 o.WriteLine(Tr.T("cmd.detect.candidates"));
-                foreach (SetupMonitor m in r.Candidates) o.WriteLine("  " + Setup.ModelId(m.DeviceId) + "  " + m.Name);
+                // 同型号的有两块时写成"型号#实例"，--main 给这个写法正好对上一块
+                var ids = new List<string>();
+                foreach (SetupMonitor m in r.Monitors) ids.Add(m.DeviceId);
+                foreach (SetupMonitor m in r.Candidates) o.WriteLine("  " + Setup.MainEdidFor(m.DeviceId, ids) + "  " + m.Name);
             }
             return 1;
         }

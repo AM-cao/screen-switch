@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.IO;
 using System.Threading;
 using System.Windows.Forms;
 
@@ -46,6 +47,14 @@ namespace ScreenSwitch
                 Tr.T("wizard.summary.peer", c.PeerConfigured ? c.PeerName : none),
                 Tr.T("wizard.summary.devices", devs.Count == 0 ? none : string.Join(Tr.T("list.sep"), devs.ToArray())) });
         }
+
+        // config.json 的"版本"：最后写入时间；文件不在为 DateTime.MinValue。向导打开时记下，点"完成"时比对。
+        public static DateTime ConfigStamp(string path)
+        {
+            try { return File.Exists(path) ? File.GetLastWriteTimeUtc(path) : DateTime.MinValue; }
+            catch (IOException) { return DateTime.MinValue; }
+            catch (UnauthorizedAccessException) { return DateTime.MinValue; }
+        }
     }
 
     // 首次启动向导（docs/settings-ui-design.md 第 4 节）：欢迎 → 主屏 → 输入口 → 对方电脑 → 完成。
@@ -61,6 +70,8 @@ namespace ScreenSwitch
         DetectResult detected;
         // 现有 config.json 读不了时的原因（读得了为 null）；点"完成"时旧文件会另存为 .bak
         readonly string brokenReason;
+        // 打开向导时 config.json 的最后写入时间：点"完成"时文件已经变了（命令行、AI 助手改过）要先问
+        readonly DateTime configStamp;
         readonly PortTable portTable = new PortTable();
         readonly PeerPanel peerPanel = new PeerPanel();
         readonly CheckBox autostart = new CheckBox { AutoSize = true, Checked = true };
@@ -71,6 +82,7 @@ namespace ScreenSwitch
         public WizardForm(SettingsService svc)
         {
             this.svc = svc;
+            configStamp = WizardLogic.ConfigStamp(svc.ConfigPath);
             string err;
             work = svc.Load(out err);
             if (err != null) { work = new Config(); brokenReason = Config.Load(svc.ConfigPath).LoadError; }
@@ -134,6 +146,13 @@ namespace ScreenSwitch
             else if (PageIndex == 3) err = WizardLogic.ApplyPeer(work, peerPanel.PeerName, peerPanel.PeerOs, peerPanel.PeerHost, peerPanel.PeerUser);
             else if (PageIndex == 4)
             {
+                // 向导开着的时候配置被别处改过：问一下要不要用向导里的设置覆盖；不覆盖就关掉向导，什么都不写
+                if (WizardLogic.ConfigStamp(svc.ConfigPath) != configStamp
+                    && MessageBox.Show(this, Tr.T("wizard.overwrite"), Tr.T("app.name"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+                {
+                    Close();
+                    return;
+                }
                 err = svc.SaveWizard(work, autostart.Checked);
                 if (err == null)
                 {
@@ -194,7 +213,8 @@ namespace ScreenSwitch
             {
                 if (detected == null || detected.Candidates.Count < 2 || monitorList.SelectedIndex < 0) return;
                 SetupMonitor m = detected.Monitors[monitorList.SelectedIndex];
-                if (m.Ddc) StartDetect(Setup.ModelId(m.DeviceId));
+                // 按完整设备路径：同型号的两块，点哪块就是哪块
+                if (m.Ddc) StartDetect(m.DeviceId);
             };
             return col;
         }
@@ -209,8 +229,10 @@ namespace ScreenSwitch
                 if (model == null)
                 {
                     monitorList.Items.Clear();
+                    var ids = new List<string>();
+                    foreach (SetupMonitor m in r.Monitors) ids.Add(m.DeviceId);
                     foreach (SetupMonitor m in r.Monitors)
-                        monitorList.Items.Add(Setup.ModelId(m.DeviceId) + "  " + m.Name + "  —  " + (m.Ddc ? Tr.T("wizard.main.ddc-yes") : Tr.T("wizard.main.ddc-no")));
+                        monitorList.Items.Add(Setup.MainEdidFor(m.DeviceId, ids) + "  " + m.Name + "  —  " + (m.Ddc ? Tr.T("wizard.main.ddc-yes") : Tr.T("wizard.main.ddc-no")));
                 }
                 if (r.Error != null)
                 {
@@ -278,7 +300,7 @@ namespace ScreenSwitch
                 }, delegate
                 {
                     peerPanel.SshLabel.Text = (sshOut ?? "").Trim();
-                    if (r.Error == null && r.Code != 0 && r.Code != work.SelfCode) work.PeerCode = r.Code;
+                    if (r.Error == null && r.Code != 0 && r.Code != work.SelfCode && work.FindDevice(r.Code) == null) work.PeerCode = r.Code;
                     if (r.Error != null) Ui.Error(peerPanel.TestLabel, r.Error);
                     else Ui.Ok(peerPanel.TestLabel, r.Code == 0 ? Tr.T("peer.reached-nocode", r.Name) : Tr.T("peer.reached", r.Name, Ports.Label(r.Code)));
                 });

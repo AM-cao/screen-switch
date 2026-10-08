@@ -44,5 +44,28 @@ namespace ScreenSwitch.Tests
             Assert.Eq("none", r.Layout, "only the main screen");
             Assert.Eq("", r.OtherScreen, "no other screen");
         }
+
+        // 两块同型号的显示器：按完整设备路径点选第二块，配的是第二块；只给型号要求再选
+        const string Twin = "\\\\?\\DISPLAY#LHC9059#5&26941f8e&0&UID4355#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}";
+
+        public static void Test_SameModelTwice_FullIdPicksThatOne()
+        {
+            var mons = new List<SetupMonitor> { new SetupMonitor(Main, "P275MV", true, 0x10), new SetupMonitor(Twin, "P275MV", true, 0x0F) };
+            DetectResult r = Detection.Choose(mons, 2, Twin);
+            Assert.Eq(null, r.Error, "full id picks exactly one");
+            Assert.Eq((uint)15, r.SelfCode, "the second one's code, not the first");
+            Assert.Eq("LHC9059#5&26941f8e&0&UID4355", r.MainEdid, "model#instance for duplicates");
+            r = Detection.Choose(mons, 2, Twin.ToLowerInvariant());
+            Assert.Eq((uint)15, r.SelfCode, "full id ignores case");
+            r = Detection.Choose(mons, 2, "LHC9059");
+            Assert.True(r.Error != null, "model alone is ambiguous");
+            Assert.Eq(2, r.Candidates.Count, "both listed to choose from");
+            var ids = new List<string> { Main, Twin };
+            r = Detection.Choose(mons, 2, Setup.MainEdidFor(Twin, ids));
+            Assert.Eq(null, r.Error, "the printed identifier matches one");
+            Assert.Eq((uint)15, r.SelfCode, "and it is the second one");
+            r = Detection.Choose(mons, 2, Setup.MainEdidFor(Main, ids));
+            Assert.Eq((uint)16, r.SelfCode, "the first one's identifier picks the first");
+        }
     }
 }

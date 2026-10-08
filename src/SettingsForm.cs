@@ -170,9 +170,10 @@ namespace ScreenSwitch
             DetectResult r = null;
             Background(this, delegate { r = svc.Detect(model); }, delegate
             {
-                if (r.Error != null && r.Candidates.Count > 1 && model == null)
+                // 几块都符合：让用户点一块，再按它的完整设备路径检测（同型号的两块也分得开）
+                if (r.NeedChoice && r.Candidates.Count > 1)
                 {
-                    string chosen = ChooseMain(r.Candidates);
+                    string chosen = ChooseMain(r);
                     if (chosen != null) RunDetect(chosen);
                     return;
                 }
@@ -183,15 +184,18 @@ namespace ScreenSwitch
             });
         }
 
-        // 几块显示器都能控制：让用户选一块，返回型号；取消返回 null
-        string ChooseMain(List<SetupMonitor> candidates)
+        // 几块显示器都能控制：让用户选一块，返回它的完整设备路径；取消返回 null
+        string ChooseMain(DetectResult r)
         {
+            List<SetupMonitor> candidates = r.Candidates;
+            var ids = new List<string>();
+            foreach (SetupMonitor m in r.Monitors) ids.Add(m.DeviceId);
             using (var f = new Form { Text = Tr.T("app.name"), FormBorderStyle = FormBorderStyle.FixedDialog, MinimizeBox = false, MaximizeBox = false, StartPosition = FormStartPosition.CenterParent, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Font = Ui.Font })
             {
                 var col = Ui.Column();
                 col.Controls.Add(Ui.Line(Tr.T("ports.choose")));
                 var list = new ListBox { Width = 360, Height = 90 };
-                foreach (SetupMonitor m in candidates) list.Items.Add(Setup.ModelId(m.DeviceId) + "  " + m.Name);
+                foreach (SetupMonitor m in candidates) list.Items.Add(Setup.MainEdidFor(m.DeviceId, ids) + "  " + m.Name);
                 list.SelectedIndex = 0;
                 col.Controls.Add(list);
                 var row = Ui.Row();
@@ -202,7 +206,7 @@ namespace ScreenSwitch
                 f.Controls.Add(col);
                 f.AcceptButton = ok; f.CancelButton = cancel;
                 if (f.ShowDialog(this) != DialogResult.OK) return null;
-                return Setup.ModelId(candidates[list.SelectedIndex].DeviceId);
+                return candidates[list.SelectedIndex].DeviceId;
             }
         }
 
@@ -223,6 +227,8 @@ namespace ScreenSwitch
                 if (err != null) { Ui.Error(status, err); return; }
                 Ui.Ok(status, "");
                 panel.SshLabel.Text = ssh.Trim();
+                // 换了地址时对方的输入口清零：输入口页重画，免得下次在那页改动把旧编码写回去
+                Later(delegate { RebuildTab(TabPorts); });
             };
             panel.AuthorizeClicked += delegate
             {
@@ -236,7 +242,12 @@ namespace ScreenSwitch
             {
                 Ui.Ok(panel.TestLabel, Tr.T("peer.testing"));
                 PeerTestResult r = null;
-                Background(panel, delegate { r = svc.TestPeer(); }, delegate { ShowTest(panel.TestLabel, r, svc); });
+                Background(panel, delegate { r = svc.TestPeer(); }, delegate
+                {
+                    ShowTest(panel.TestLabel, r, svc);
+                    // 存下了对方的输入口编码：输入口页重画
+                    if (r.CodeSaved) Later(delegate { RebuildTab(TabPorts); });
+                });
             };
             col.Controls.Add(panel);
             col.Controls.Add(Ui.Note(Tr.T("peer.skip-hint")));
@@ -292,8 +303,12 @@ namespace ScreenSwitch
             var saved = Ui.Line("");
             col.Controls.Add(Ui.Button(Tr.T("screens.save-now"), delegate
             {
-                string err = host.SaveLayoutNow();
-                if (err != null) Ui.Error(saved, err); else Ui.Ok(saved, Tr.T("screens.saved"));
+                // 正在切换时要等切换结束（最长约 20 秒）：放到后台，窗口不卡
+                string err = null;
+                Background(saved, delegate { err = host.SaveLayoutNow(); }, delegate
+                {
+                    if (err != null) Ui.Error(saved, err); else Ui.Ok(saved, Tr.T("screens.saved"));
+                });
             }));
             col.Controls.Add(Ui.Note(Tr.T("screens.save-now.note")));
             col.Controls.Add(saved);
@@ -323,8 +338,8 @@ namespace ScreenSwitch
             {
                 string err = svc.SetOption("hotkey", new string[] { target, box.Text.Length == 0 ? "none" : box.Text });
                 Done(err, TabHotkeys);
-                // 写入配置时，运行中的托盘程序在进程内同步重载并重新登记快捷键（SettingsService.Reload）；
-                // 所以这里等一下再重画本页，读到的"没能注册的快捷键"才是新的
+                // 写入配置时，托盘程序的进程内重载（SettingsService.Reload）已排进界面线程的消息队列；
+                // 这里的重画排在它后面，读到的"没能注册的快捷键"才是新的
                 if (err == null) Later(delegate { RebuildTab(TabHotkeys); });
             };
             box.Committed += commit;

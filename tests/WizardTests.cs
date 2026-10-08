@@ -51,5 +51,22 @@ namespace ScreenSwitch.Tests
             Assert.Eq(0, System.IO.Directory.GetFileSystemEntries(d).Length, "closing writes nothing: temp dir stays empty");
             System.IO.Directory.Delete(d, true);
         }
+
+        // 向导打开期间 config.json 被改过：点"完成"前要能看出来（不在、写过、又写过都算变了）
+        public static void Test_ConfigStamp_SeesChanges()
+        {
+            string d = SettingsServiceTests.TempDir();
+            string p = System.IO.Path.Combine(d, "config.json");
+            System.DateTime missing = WizardLogic.ConfigStamp(p);
+            Assert.Eq(System.DateTime.MinValue, missing, "missing file");
+            new Config().Save(p);
+            System.IO.File.SetLastWriteTimeUtc(p, new System.DateTime(2026, 1, 1, 0, 0, 0, System.DateTimeKind.Utc));
+            System.DateTime first = WizardLogic.ConfigStamp(p);
+            Assert.True(first != missing, "created counts as changed");
+            Assert.Eq(first, WizardLogic.ConfigStamp(p), "untouched: same stamp");
+            new Config().Save(p);
+            Assert.True(WizardLogic.ConfigStamp(p) != first, "written again: changed");
+            System.IO.Directory.Delete(d, true);
+        }
     }
 }

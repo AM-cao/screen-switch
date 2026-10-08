@@ -98,6 +98,23 @@ namespace ScreenSwitch.Tests
             Directory.Delete(d, true);
         }
 
+        public static void Test_Detect_SameModelTwice_ListsUniqueIds()
+        {
+            string d; FakeSetupEnv env;
+            var s = Svc(out d, out env);
+            env.Mons.Add(new SetupMonitor("\\\\?\\DISPLAY#AAA0001#5&1&0&UID1#{x}", "A", true, 0x10));
+            env.Mons.Add(new SetupMonitor("\\\\?\\DISPLAY#AAA0001#5&1&0&UID2#{x}", "A", true, 0x0F));
+            Out o = Run(s, "detect");
+            Assert.Eq(1, o.Rc, "must choose");
+            Assert.True(o.Text.Contains("AAA0001#5&1&0&UID1") && o.Text.Contains("AAA0001#5&1&0&UID2"), "unique ids listed: " + o.Text);
+            Assert.Eq(1, Run(s, "detect", "--main", "AAA0001").Rc, "model alone is ambiguous");
+            Assert.Eq(0, Run(s, "detect", "--main", "AAA0001#5&1&0&UID2").Rc, "the listed id picks one");
+            Config c = Config.Load(Path.Combine(d, "config.json"));
+            Assert.Eq("AAA0001#5&1&0&UID2", c.MainEdid, "the second one written");
+            Assert.Eq((uint)15, c.SelfCode, "its code");
+            Directory.Delete(d, true);
+        }
+
         public static void Test_Peer_SetClearTest()
         {
             string d; FakeSetupEnv env;

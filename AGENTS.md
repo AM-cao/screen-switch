@@ -18,9 +18,9 @@ Requirements: the main screen supports DDC/CI (enabled in its own menu) and the 
 
 Program: `%USERPROFILE%\ScreenSwitch\ScreenSwitchCli.exe` (below: `ss`).
 
-1. Install: in the repository folder run `install.cmd`. It builds, installs, adds a Startup shortcut and starts the tray program, which opens the setup wizard window because nothing is configured yet. Tell the user they can close the wizard (closing it writes nothing) or use it instead of the steps below. Check: `ss status` prints JSON.
+1. Install: in the repository folder run `install.cmd`. It builds, installs, adds a Startup shortcut and starts the tray program, which opens the setup wizard window because nothing is configured yet. **Before running any of the steps below, ask the user to close that wizard window** (closing it writes nothing). Do not mix the two: either the user finishes the wizard and you skip to the checks, or the wizard is closed and you run the commands. Check: `ss status` prints JSON.
 2. Ask the user to switch the main screen to this computer with the monitor's button. Then `ss detect`.
-   - If it fails with several candidates, ask the user which display is the shared one and run `ss detect --main <model>`.
+   - If it fails with several candidates, ask the user which display is the shared one and run `ss detect --main <id>` with the identifier printed for it (the model, or `model#instance` when two displays are the same model).
    - Check: `status.configured` is true, `status.self.code` is not 0.
 3. Inputs: `ss ports` lists the monitor's inputs as JSON (`monitorKnown` false means the list could not be read; each entry in `ports` has `code`, `name`, `use` = `self|peer|device|none`, `device`). Ask the user what is connected to each input. Register devices with `ss device add <code> <name>` (code 1-255, decimal; `device rename <code> <name>` and `device remove <code>` also exist).
 4. Other computer (optional): `ss peer set --os <windows|mac> --host <host or IP> --user <user> [--name <name>]`. This also sets up this computer's SSH client for that host. `ss peer clear` removes it.

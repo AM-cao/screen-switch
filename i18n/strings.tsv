@@ -39,7 +39,7 @@ problem.tray-not-running	托盘程序没在运行。	The tray app is not running
 problem.peer-code-unknown	不知道 {0} 接在哪个输入口：在设置的“输入口”里标出来，或点“测试连接”。	It is not known which input {0} uses: mark it under Inputs in Settings, or click Test connection.
 cmd.ok	已完成。	Done.
 cmd.usage	用法：{0}	Usage: {0}
-cmd.detect.candidates	候选（用 --main <型号> 指定）：	Candidates (pass --main <model>):
+cmd.detect.candidates	候选（用 --main <下面列出的标识> 指定）：	Candidates (pass --main <one of the ids below>):
 cmd.autostart.on	开机自动运行：开	Start at login: on
 cmd.autostart.off	开机自动运行：关	Start at login: off
 cmd.peer.code	{0} 接在编码 {1} 的输入口。	{0} uses input code {1}.
@@ -149,6 +149,7 @@ wizard.summary.devices	设备：{0}	Devices: {0}
 wizard.summary.main-plus-unknown	主屏 + 另一块屏	Main screen + another screen
 wizard.summary.none	无	none
 wizard.config-broken	现有的配置文件读不了（{0}），完成后会另存为 config.json.bak。	The existing config.json cannot be read ({0}); it will be kept as config.json.bak when you finish.
+wizard.overwrite	配置在向导打开期间被修改过（例如命令行或 AI 助手改过）。用向导里的设置覆盖它吗？	The configuration was changed while the wizard was open (for example from the command line or by an AI assistant). Overwrite it with the wizard's settings?
 device.default	设备 {0}	Device {0}
 layout.need-two	需要恰好两块活动显示器，当前 {0} 块	Exactly two active displays are required; there are {0} now
 layout.is-clone	当前是克隆模式，请先切回扩展模式再保存	The displays are cloned; switch back to extend mode before saving
