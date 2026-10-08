@@ -37,3 +37,10 @@ auth.err.failed	授权没有成功（{0}），详情见 setup-sshd.log。	Author
 problem.not-configured	还没有设置：请运行设置向导。	Not set up yet: run the setup wizard.
 problem.tray-not-running	托盘程序没在运行。	The tray app is not running.
 problem.peer-code-unknown	不知道 {0} 接在哪个输入口：在设置的“输入口”里标出来，或点“测试连接”。	It is not known which input {0} uses: mark it under Inputs in Settings, or click Test connection.
+cmd.ok	已完成。	Done.
+cmd.usage	用法：{0}	Usage: {0}
+cmd.detect.candidates	候选（用 --main <型号> 指定）：	Candidates (pass --main <model>):
+cmd.autostart.on	开机自动运行：开	Start at login: on
+cmd.autostart.off	开机自动运行：关	Start at login: off
+cmd.peer.code	{0} 接在编码 {1} 的输入口。	{0} uses input code {1}.
+cmd.peer.code-unknown	连上了 {0}，但它还不知道自己接在哪个输入口。	Reached {0}, but it does not know its own input yet.

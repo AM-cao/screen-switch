@@ -136,6 +136,9 @@ namespace ScreenSwitch
         public static int Run(string[] args, string dir)
         {
             if (args.Length == 0) return 1;
+            // 命令层的命令（status、detect、ports、peer、pubkey、authorize、device、set、autostart）
+            int handled = Commands.Run(args, dir, ConsoleIo.Out());
+            if (handled != Commands.NotMine) return handled;
             switch (args[0])
             {
                 case "request":
@@ -254,6 +257,15 @@ namespace ScreenSwitch
             "  setup                             interactive setup (questions in Chinese): main screen, this computer, the other\r\n" +
             "                                    computer, devices; writes config.json and restarts the tray app\r\n" +
             "  setup devices                     only the device list: rename, delete, add\r\n" +
+            "  status                            all state as JSON (for agents)\r\n" +
+            "  detect [--main <model>]           detect the main screen, this computer's input and the screen combination\r\n" +
+            "  ports                             the main screen's inputs and what is connected to each (JSON)\r\n" +
+            "  peer set|clear|test               the other computer (set --os --host --user [--name])\r\n" +
+            "  pubkey                            print this computer's SSH public key (creates one if missing)\r\n" +
+            "  authorize \"<key>\"                 authorise the other computer's key (needs administrator)\r\n" +
+            "  device add|rename|remove          devices on the other inputs\r\n" +
+            "  set <key> <value>                 owned-layout, auto-save, direct-take, hotkey, after-take\r\n" +
+            "  autostart on|off                  start at login\r\n" +
             "  request give peer                 ask the running tray app to switch the main screen to the other computer\r\n" +
             "  request give code <n>             ... to the device on input code n (decimal, must be in the device list)\r\n" +
             "  request give self                 ... or to re-apply this computer's layout\r\n" +

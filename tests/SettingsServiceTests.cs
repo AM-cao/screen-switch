@@ -339,5 +339,6 @@ namespace ScreenSwitch.Tests
             var devices = (List<Dictionary<string, object>>)st["devices"];
             Assert.Eq("Switch", devices[0]["name"], "device");
             Directory.Delete(d, true);
-        }    }
+        }
+    }
 }
