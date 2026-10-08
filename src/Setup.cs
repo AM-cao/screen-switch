@@ -692,7 +692,7 @@ namespace ScreenSwitch
         string Ask(string prompt)
         {
             // 英文提示以半角冒号结尾：冒号后补一个空格（中文提示以全角冒号结尾，不受影响）
-            if (prompt.EndsWith(":")) prompt += " ";
+            if (prompt.EndsWith(":", StringComparison.Ordinal)) prompt += " ";
             output.Write(prompt);
             output.Flush();
             string s = input.ReadLine();

@@ -19,8 +19,22 @@ namespace ScreenSwitch.Tests
             var c = new Config();
             c.MainEdid = "LHC9059"; c.SelfCode = 16; c.Layout = "none";
             c.Devices.Add(new Device("Switch", 17));
-            string s = WizardLogic.Summary(c);
-            Assert.True(s.Contains("LHC9059") && s.Contains("DisplayPort 2") && s.Contains("只有主屏") && s.Contains("Switch") && s.Contains("无"), s);
+            string[] lines = WizardLogic.Summary(c, "").Split('\n');
+            Assert.Eq(5, lines.Length, "one line per item");
+            Assert.True(lines[0].Contains("LHC9059"), lines[0]);
+            Assert.True(lines[1].Contains("DisplayPort 2"), lines[1]);
+            Assert.True(lines[2].Contains("只有主屏"), lines[2]);
+            Assert.True(lines[3].Contains("无"), "no peer: " + lines[3]);
+            Assert.True(lines[4].Contains("Switch"), lines[4]);
+        }
+
+        public static void Test_Summary_ScreenCombination()
+        {
+            var c = new Config();
+            c.MainEdid = "LHC9059"; c.SelfCode = 16; c.Layout = "second";
+            Assert.True(WizardLogic.Summary(c, "DELL U2720Q").Split('\n')[2].Contains("DELL U2720Q"), "other screen's name when known");
+            string unknown = WizardLogic.Summary(c, "").Split('\n')[2];
+            Assert.True(unknown.Contains("另一块屏") && !unknown.Contains("…"), "generic wording when unknown: " + unknown);
         }
 
         public static void Test_Form_StartsOnWelcome_NoWriteUntilFinish()

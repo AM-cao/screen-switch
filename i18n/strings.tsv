@@ -141,7 +141,12 @@ wizard.peer.title	对方电脑	Other computer
 wizard.peer.text	另一台也接在这块主屏上的电脑（可以跳过）。	The other computer connected to this main screen (you can skip this).
 wizard.done.title	完成	Done
 wizard.done.text	点“完成”后保存设置并开始工作。以后可以在右键菜单的“设置…”里修改。	Click Finish to save and start. You can change everything later under Settings… in the menu.
-wizard.summary	主屏 {0}；这台电脑接在 {1}；{2}；对方电脑：{3}；设备：{4}	Main screen {0}; this computer uses {1}; {2}; other computer: {3}; devices: {4}
+wizard.summary.main	主屏：{0}	Main screen: {0}
+wizard.summary.self	这台电脑的输入：{0}	This computer's input: {0}
+wizard.summary.screens	屏幕组合：{0}	Screen combination: {0}
+wizard.summary.peer	对方电脑：{0}	Other computer: {0}
+wizard.summary.devices	设备：{0}	Devices: {0}
+wizard.summary.main-plus-unknown	主屏 + 另一块屏	Main screen + another screen
 wizard.summary.none	无	none
 wizard.config-broken	现有的配置文件读不了（{0}），完成后会另存为 config.json.bak。	The existing config.json cannot be read ({0}); it will be kept as config.json.bak when you finish.
 device.default	设备 {0}	Device {0}

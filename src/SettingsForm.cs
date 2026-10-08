@@ -140,7 +140,7 @@ namespace ScreenSwitch
             mainRow.Controls.Add(Ui.Line(c.MainEdid == Config.Placeholder ? Tr.T("ports.main-none") : Tr.T("ports.main", c.MainEdid)));
             mainRow.Controls.Add(Ui.Button(Tr.T("ports.detect"), delegate { RunDetect(null); }));
             col.Controls.Add(mainRow);
-            var note = Ui.Note(Tr.T("ports.reading"));
+            var note = Ui.HideWhenEmpty(Ui.Note(Tr.T("ports.reading")));
             col.Controls.Add(note);
             var table = new PortTable();
             col.Controls.Add(table);

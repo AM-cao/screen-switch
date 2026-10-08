@@ -30,15 +30,21 @@ namespace ScreenSwitch
             return null;
         }
 
-        public static string Summary(Config c)
+        // 完成页的小结：一项一行。otherScreen 是主屏页检测到的另一块屏的名字，不知道就传空。
+        public static string Summary(Config c, string otherScreen)
         {
             string none = Tr.T("wizard.summary.none");
             var devs = new List<string>();
             foreach (Device d in c.Devices) devs.Add(d.Name + " " + Ports.Label(d.Code));
-            return Tr.T("wizard.summary", c.MainEdid, Ports.Label(c.SelfCode),
-                c.LayoutNone ? Tr.T("screens.main-only") : Tr.T("screens.main-plus", "…"),
-                c.PeerConfigured ? c.PeerName : none,
-                devs.Count == 0 ? none : string.Join(Tr.T("list.sep"), devs.ToArray()));
+            string other = (otherScreen ?? "").Trim();
+            string screens = c.LayoutNone ? Tr.T("screens.main-only")
+                : other.Length > 0 ? Tr.T("screens.main-plus", other) : Tr.T("wizard.summary.main-plus-unknown");
+            return string.Join("\n", new string[] {
+                Tr.T("wizard.summary.main", c.MainEdid),
+                Tr.T("wizard.summary.self", Ports.Label(c.SelfCode)),
+                Tr.T("wizard.summary.screens", screens),
+                Tr.T("wizard.summary.peer", c.PeerConfigured ? c.PeerName : none),
+                Tr.T("wizard.summary.devices", devs.Count == 0 ? none : string.Join(Tr.T("list.sep"), devs.ToArray())) });
         }
     }
 
@@ -108,7 +114,7 @@ namespace ScreenSwitch
             if (page == 1) StartDetect(null);
             if (page == 2) LoadPorts();
             if (page == 3) LoadKey();
-            if (page == 4) summary.Text = WizardLogic.Summary(work);
+            if (page == 4) summary.Text = WizardLogic.Summary(work, detected != null && detected.Error == null ? detected.OtherScreen : "");
         }
 
         void Next()

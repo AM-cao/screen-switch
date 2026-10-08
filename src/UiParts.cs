@@ -42,6 +42,14 @@ namespace ScreenSwitch
             return new Label { Text = text, AutoSize = true, MaximumSize = new Size(520, 0), Margin = new Padding(0, 6, 0, 4) };
         }
 
+        // 文字为空时不占位置（空标签也会占一行高度）
+        public static Label HideWhenEmpty(Label l)
+        {
+            l.Visible = l.Text.Length > 0;
+            l.TextChanged += delegate { l.Visible = l.Text.Length > 0; };
+            return l;
+        }
+
         public static FlowLayoutPanel Column()
         {
             return new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Dock = DockStyle.Top, Padding = new Padding(16, 12, 16, 12) };
@@ -187,11 +195,11 @@ namespace ScreenSwitch
         public readonly ComboBox OsBox = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 120 };
         public readonly TextBox HostBox = new TextBox { Width = 220 };
         public readonly TextBox UserBox = new TextBox { Width = 160 };
-        public readonly TextBox MyKeyBox = new TextBox { Width = 520, ReadOnly = true };
-        public readonly TextBox PeerKeyBox = new TextBox { Width = 520 };
-        public readonly Label AuthLabel = Ui.Line("");
-        public readonly Label TestLabel = Ui.Line("");
-        public readonly Label SshLabel = Ui.Note("");
+        public readonly TextBox MyKeyBox = new TextBox { Width = 440, ReadOnly = true };
+        public readonly TextBox PeerKeyBox = new TextBox { Width = 440 };
+        public readonly Label AuthLabel = Ui.HideWhenEmpty(Ui.Line(""));
+        public readonly Label TestLabel = Ui.HideWhenEmpty(Ui.Line(""));
+        public readonly Label SshLabel = Ui.HideWhenEmpty(Ui.Note(""));
         public event Action FieldsCommitted;
         public event Action AuthorizeClicked;
         public event Action TestClicked;
