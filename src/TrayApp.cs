@@ -50,9 +50,11 @@ namespace ScreenSwitch
         }
 
         readonly string dir;
-        readonly Config cfg;
+        Config cfg;
         readonly Log log;
-        readonly Orchestrator orch;
+        Orchestrator orch;
+        ILayout layout;
+        readonly ReloadGate reloadGate = new ReloadGate();
         readonly NotifyIcon icon;
         readonly ContextMenuStrip menu;
         readonly MessageForm form;
@@ -67,20 +69,12 @@ namespace ScreenSwitch
         {
             this.dir = dir;
             log = new Log(Path.Combine(dir, "screenswitch.log"));
-            cfg = Config.Load(Path.Combine(dir, "config.json"));
-            if (cfg.LoadError != null) log.Error("config: " + cfg.LoadError);
             form = new MessageForm();
             IntPtr h = form.Handle;
             form.OnHotkey = OnHotkey;
             form.OnSessionEnd = OnSessionEnd;
 
-            var ddc = new DxvaDdc(cfg.MainEdid, log);
-            ILayout layout = Layouts.Create(cfg, Path.Combine(dir, "layout-owned.bin"), log);
-            var relay = new SshRelay(cfg, log, dir);
-            orch = new Orchestrator(ddc, layout, relay, new TrayNotifier(this), new RealClock(), cfg, log, dir);
-            orch.OwnedChanged += delegate { form.BeginInvoke(new Action(RebuildMenu)); };
-            var afterTake = new AfterTakeRunner(cfg.AfterTakeCommand, cfg.AfterTakeDelayMs, log);
-            orch.AfterTake = afterTake.Schedule;
+            BuildEngine();
 
             menu = new ContextMenuStrip();
             menu.ShowImageMargin = false;
@@ -117,6 +111,41 @@ namespace ScreenSwitch
             }
         }
 
+        string ConfigPath { get { return Path.Combine(dir, "config.json"); } }
+
+        // 运行核心：配置、DDC、布局、中继、编排器。重新加载配置时整个重建。
+        void BuildEngine()
+        {
+            cfg = Config.Load(ConfigPath);
+            if (cfg.LoadError != null) log.Error("config: " + cfg.LoadError);
+            var ddc = new DxvaDdc(cfg.MainEdid, log);
+            layout = Layouts.Create(cfg, Path.Combine(dir, "layout-owned.bin"), log);
+            var relay = new SshRelay(cfg, log, dir);
+            orch = new Orchestrator(ddc, layout, relay, new TrayNotifier(this), new RealClock(), cfg, log, dir);
+            orch.OwnedChanged += delegate { form.BeginInvoke(new Action(RebuildMenu)); };
+            orch.ReloadRequested += delegate { form.BeginInvoke(new Action(RequestReload)); };
+            var afterTake = new AfterTakeRunner(cfg.AfterTakeCommand, cfg.AfterTakeDelayMs, log);
+            orch.AfterTake = afterTake.Schedule;
+        }
+
+        // 配置改了：空闲时立即重建，正在切换时等切换结束（ReloadGate）
+        public void RequestReload()
+        {
+            if (reloadGate.Request(busy != 0)) ReloadEngine();
+        }
+
+        void ReloadEngine()
+        {
+            timer.Stop();
+            foreach (HotkeyBinding b in hotkeys) UnregisterHotKey(form.Handle, b.Id);
+            hotkeys.Clear();
+            BuildEngine();
+            RegisterHotkeys();
+            RebuildMenu();
+            timer.Start();
+            log.Info("config reloaded");
+        }
+
         bool UiAlive() { return form != null && form.IsHandleCreated && !form.IsDisposed; }
 
         public void Notify(string title, string text)
@@ -141,7 +170,11 @@ namespace ScreenSwitch
                     if (UiAlive()) form.BeginInvoke(new Action(RebuildMenu));
                 }
                 catch (Exception e) { log.Error("action: " + e); Notify("操作失败", e.Message); }
-                finally { Interlocked.Exchange(ref busy, 0); }
+                finally
+                {
+                    Interlocked.Exchange(ref busy, 0);
+                    if (UiAlive()) form.BeginInvoke(new Action(delegate { if (reloadGate.OnIdle()) ReloadEngine(); }));
+                }
             });
         }
 

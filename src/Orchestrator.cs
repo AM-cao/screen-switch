@@ -54,6 +54,8 @@ namespace ScreenSwitch
         public event Action OwnedChanged;
         // 布局拿回成功后回调（托盘程序用来执行 afterTake 命令）；失败时不调用
         public Action AfterTake;
+        // 命令文件 reload（命令行改完配置后写入，只在本机用）：托盘程序重新读取配置
+        public event Action ReloadRequested;
 
         public Orchestrator(IDdc ddc, ILayout layout, IRelay relay, INotifier notifier, IClock clock, Config cfg, Log log, string dir)
         {
@@ -341,6 +343,11 @@ namespace ScreenSwitch
                 // 旧内容：切到设备列表里的第一个设备
                 if (cfg.Devices.Count > 0) GiveToDeviceLocked(cfg.Devices[0].Code);
                 else log.Info("give other ignored: no devices configured");
+            }
+            else if (line == "reload")
+            {
+                Action h = ReloadRequested;
+                if (h != null) h();
             }
             else if (line == "pre-take")
             {
