@@ -105,3 +105,14 @@ general.openfolder	打开配置文件所在的文件夹	Open the folder with the
 wizard.cancel	取消	Cancel
 menu.give-to	切给 {0}	Switch to {0}
 common.ok	确定	OK
+menu.take-back	拿回主屏	Take back main screen
+menu.extend	扩展屏幕	Extend displays
+menu.main-only	只用主屏	Main screen only
+menu.settings	设置…	Settings…
+menu.quit	退出	Quit
+problem.hotkey	快捷键 {0} 没能注册（可能被别的程序占用）	Shortcut {0} could not be registered (another program may be using it)
+problem.config	配置文件读不了，已用默认值	The configuration could not be read; defaults are in use
+notify.busy	正在切换中	Switching in progress
+notify.busy.text	请等待当前操作完成	Please wait for the current switch to finish
+notify.failed	操作失败	Something went wrong
+notify.log-failed	打开日志失败	Could not open the log

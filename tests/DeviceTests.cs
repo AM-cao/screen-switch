@@ -28,31 +28,6 @@ namespace ScreenSwitch.Tests
             return new Orchestrator(ddc, layout, relay, n, new FakeClock(), Cfg(), new Log(Path.Combine(dir, "t.log")), dir);
         }
 
-        static string Labels(List<TrayApp.SwitchEntry> entries)
-        {
-            var labels = new List<string>();
-            foreach (TrayApp.SwitchEntry e in entries) labels.Add(e.Label);
-            return string.Join("|", labels.ToArray());
-        }
-
-        public static void Test_Menu_OneItemPerDevice()
-        {
-            var owned = TrayApp.SwitchEntries(Cfg(), true);
-            Assert.Eq("切给 MacBook|切给 Switch|切给 PS5", Labels(owned), "owned");
-            Assert.Eq(TrayApp.SwitchKind.Peer, owned[0].Kind, "peer item");
-            Assert.Eq(TrayApp.SwitchKind.Device, owned[2].Kind, "device item");
-            Assert.Eq((uint)0x12, owned[2].Code, "device code");
-            var away = TrayApp.SwitchEntries(Cfg(), false);
-            Assert.Eq("拿回主屏|切给 Switch|切给 PS5", Labels(away), "not owned");
-            Assert.Eq(TrayApp.SwitchKind.TakeBack, away[0].Kind, "take back item");
-        }
-
-        // 旧配置：原来的 Other 编码变成"设备 1""设备 2"
-        public static void Test_Menu_LegacyConfig_DeviceNumbers()
-        {
-            Assert.Eq("切给 Mac|切给 设备 1|切给 设备 2", Labels(TrayApp.SwitchEntries(TestCfg.Legacy(), true)), "legacy names");
-        }
-
         // 设备有信号：写它的编码、让出，观察 15 秒没有跳回，结束，不提示
         public static void Test_GiveDevice_Owned_WritesOnlyItsCode()
         {

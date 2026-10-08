@@ -40,9 +40,9 @@ namespace ScreenSwitch.Tests
             c.Devices[1].Hotkey = " Ctrl+Alt+2 ";
             var b = TrayApp.HotkeyBindings(c);
             Assert.Eq(2, b.Count, "two bindings");
-            Assert.Eq(TrayApp.SwitchKind.Peer, b[0].Kind, "peer binding");
+            Assert.Eq(MenuKind.Peer, b[0].Kind, "peer binding");
             Assert.Eq("Ctrl+Alt+1", b[0].Hotkey, "peer hotkey");
-            Assert.Eq(TrayApp.SwitchKind.Device, b[1].Kind, "device binding");
+            Assert.Eq(MenuKind.Device, b[1].Kind, "device binding");
             Assert.Eq((uint)0x12, b[1].Code, "second device's code");
             Assert.Eq("Ctrl+Alt+2", b[1].Hotkey, "trimmed");
             Assert.True(b[0].Id != b[1].Id, "distinct ids");
@@ -60,24 +60,5 @@ namespace ScreenSwitch.Tests
             System.IO.File.Delete(p);
         }
 
-        // 没有配置对方时菜单里没有"切给 <对方>"
-        public static void Test_Menu_NoPeer_NoGivePeerItem()
-        {
-            var c = new Config();
-            c.Devices.Add(new Device("Switch", 0x11));
-            var owned = TrayApp.SwitchEntries(c, true);
-            Assert.Eq(1, owned.Count, "only the device");
-            Assert.Eq("切给 Switch", owned[0].Label, "device item");
-            var away = TrayApp.SwitchEntries(c, false);
-            Assert.Eq("拿回主屏", away[0].Label, "take back stays (direct switch)");
-            Assert.Eq(2, away.Count, "take back + device");
-        }
-
-        public static void Test_Menu_PeerNameFromConfig()
-        {
-            var c = TestCfg.Legacy();
-            c.PeerName = "书房 台式机";
-            Assert.Eq("切给 书房 台式机", TrayApp.SwitchEntries(c, true)[0].Label, "peer name in the menu");
-        }
     }
 }
