@@ -323,6 +323,25 @@ namespace ScreenSwitch.Tests
             Directory.Delete(d, true);
         }
 
+        public static void Test_SaveWizard_BacksUpUnreadableConfig()
+        {
+            string d = TempDir(); int r;
+            var s = Make(d, new FakeSetupEnv(), out r);
+            string cfg = Path.Combine(d, "config.json");
+            byte[] broken = new byte[] { 0x7B, 0x20, 0x6E, 0x6F, 0x74, 0x20, 0x6A, 0x73, 0x6F, 0x6E };
+            File.WriteAllBytes(cfg, broken);
+            File.WriteAllText(cfg + ".bak", "older backup");
+            var c = new Config(); c.MainEdid = "ABC1234"; c.SelfCode = 16;
+            Assert.Eq(null, s.SaveWizard(c, false), "saved");
+            Assert.True(File.ReadAllBytes(cfg + ".bak").Length == broken.Length && File.ReadAllText(cfg + ".bak") == "{ not json", "bak holds the original bytes");
+            Assert.Eq("ABC1234", Config.Load(cfg).MainEdid, "config.json is the new one");
+            // 读得了的旧配置不留 .bak
+            File.Delete(cfg + ".bak");
+            Assert.Eq(null, s.SaveWizard(c, false), "saved again");
+            Assert.Eq(false, File.Exists(cfg + ".bak"), "readable config: no bak");
+            Directory.Delete(d, true);
+        }
+
         public static void Test_Status_FieldsAndProblems()
         {
             string d = TempDir(); int r;

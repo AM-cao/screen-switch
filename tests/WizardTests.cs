@@ -34,7 +34,7 @@ namespace ScreenSwitch.Tests
                 f.GoTo(1);
                 Assert.Eq(1, f.PageIndex, "main screen page");
             }
-            Assert.Eq(false, System.IO.File.Exists(System.IO.Path.Combine(d, "config.json")), "closing writes nothing");
+            Assert.Eq(0, System.IO.Directory.GetFileSystemEntries(d).Length, "closing writes nothing: temp dir stays empty");
             System.IO.Directory.Delete(d, true);
         }
     }

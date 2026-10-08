@@ -53,6 +53,8 @@ namespace ScreenSwitch
         readonly Label error = new Label { AutoSize = true, ForeColor = Color.Firebrick, Margin = new Padding(16, 8, 16, 0) };
         readonly Control[] pages = new Control[5];
         DetectResult detected;
+        // 现有 config.json 读不了时的原因（读得了为 null）；点"完成"时旧文件会另存为 .bak
+        readonly string brokenReason;
         readonly PortTable portTable = new PortTable();
         readonly PeerPanel peerPanel = new PeerPanel();
         readonly CheckBox autostart = new CheckBox { AutoSize = true, Checked = true };
@@ -65,7 +67,7 @@ namespace ScreenSwitch
             this.svc = svc;
             string err;
             work = svc.Load(out err);
-            if (err != null) work = new Config();
+            if (err != null) { work = new Config(); brokenReason = Config.Load(svc.ConfigPath).LoadError; }
             Text = Tr.T("wizard.title");
             Font = Ui.Font;
             ClientSize = new Size(640, 620);
@@ -164,6 +166,12 @@ namespace ScreenSwitch
         {
             var col = Page(Tr.T("wizard.welcome.title"), Tr.T("wizard.welcome.text"));
             col.Controls.Add(Ui.Line(Tr.T("wizard.welcome.before")));
+            if (brokenReason != null)
+            {
+                var warn = Ui.Line("");
+                Ui.Error(warn, Tr.T("wizard.config-broken", brokenReason));
+                col.Controls.Add(warn);
+            }
             return col;
         }
 
@@ -223,7 +231,10 @@ namespace ScreenSwitch
         void LoadPorts()
         {
             PortsResult p = null;
-            Config snapshot = work;
+            // 后台读数时用副本：界面线程上 work 可能还在变
+            var snapshot = new Config();
+            snapshot.MainEdid = work.MainEdid; snapshot.SelfCode = work.SelfCode; snapshot.PeerCode = work.PeerCode;
+            foreach (Device d in work.Devices) snapshot.Devices.Add(new Device(d.Name, d.Code));
             Background(delegate { p = svc.ReadPorts(snapshot); }, delegate
             {
                 portTable.SetRows(p.Rows);
@@ -250,7 +261,10 @@ namespace ScreenSwitch
                 Ui.Ok(peerPanel.TestLabel, Tr.T("peer.testing"));
                 PeerTestResult r = null;
                 string sshOut = "";
-                Config snapshot = work;
+                var snapshot = new Config();
+                snapshot.PeerOs = work.PeerOs; snapshot.PeerHost = work.PeerHost; snapshot.PeerUser = work.PeerUser;
+                snapshot.PeerName = work.PeerName; snapshot.PeerProgram = work.PeerProgram; snapshot.PeerKeyPath = work.PeerKeyPath;
+                snapshot.PeerTimeoutSec = work.PeerTimeoutSec; snapshot.SshExe = work.SshExe;
                 Background(delegate
                 {
                     svc.Env.SshClientSetup(snapshot.PeerUser, snapshot.PeerHost, out sshOut);

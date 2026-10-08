@@ -337,7 +337,13 @@ namespace ScreenSwitch
 
         public string SaveWizard(Config c, bool autostartOn)
         {
-            try { c.Save(ConfigPath); }
+            try
+            {
+                // 现有的 config.json 读不了：先留一份 config.json.bak（盖掉旧的 .bak），再写新的
+                if (File.Exists(ConfigPath) && Config.Load(ConfigPath).LoadError != null)
+                    File.Copy(ConfigPath, ConfigPath + ".bak", true);
+                c.Save(ConfigPath);
+            }
             catch (Exception e) { return e.Message; }
             ClearDirectRecord();
             string err = SetAutostart(autostartOn);
