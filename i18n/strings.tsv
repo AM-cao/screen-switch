@@ -1,2 +1,8 @@
 # ScreenSwitch 文字表（docs/settings-ui-design.md 第 8 节）：编号<TAB>中文<TAB>英文。{0} {1} 为占位，\n 表示换行。两端共用。
 app.name	ScreenSwitch	ScreenSwitch
+port.label	{0}（{1}）	{0} ({1})
+ports.err.code	编码要在 1 到 255 之间。	A code must be between 1 and 255.
+ports.err.duplicate	编码 {0} 出现了两次。	Code {0} appears twice.
+ports.err.self	这台电脑所接的口不能改；换了接口请重新检测主屏。	The port of this computer cannot be changed here; detect the main screen again if you moved the cable.
+ports.err.two-peers	只能有一个口接对方电脑。	Only one port can be the other computer.
+ports.err.name	请给 {0} 上的设备起个名字。	Please name the device on {0}.
