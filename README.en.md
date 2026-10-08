@@ -19,7 +19,7 @@ ScreenSwitch runs a background program on each computer. It gives you:
   - Switching with the monitor's own buttons is followed too.
 - **Direct first, then relay.** To take the monitor back, a computer first sends the switch command itself. If the monitor only listens on the active input, as most do, the computer asks the other one over SSH to switch it.
 - **Heads-up before handing over.** Before giving the monitor away, a computer tells the receiver to restore its desktop first, so you never see a flash of the mirrored picture.
-- **Two layouts after taking back.** Extend (use both screens), or use only the shared monitor (turn the other screen off).
+- **Two layouts after taking back.** "Extend displays" (use both screens), or "Main screen only" (turn the other screen off).
 - **Remembered arrangement.** When you change the arrangement in system settings, it is saved and restored on every take-back.
 
 ## Supported setups
@@ -65,7 +65,7 @@ If your setup is in the "automated tests only" rows, please open an issue and te
   - Both computers must be on the same LAN and able to SSH to each other: on Windows that means the OpenSSH server, on a Mac it means Remote Login.
   - It works without the network too. To take the monitor back on the computer that isn't showing, you then press the monitor's button, unless the monitor accepts direct switching.
   - For the other computer to ask a Windows PC to switch, the Windows account must be in the Administrators group.
-- **UI language.** Chinese only for now.
+- **UI language.** Chinese and English, following the system language.
 
 ## How it works
 
@@ -90,36 +90,51 @@ Computer A: ScreenSwitch  <── SSH ──>  Computer B: ScreenSwitch
 
 ## Install
 
-Install on both computers, each while the shared monitor is showing it. The installer runs an interactive setup. It finds the shared monitor and reads this computer's input code on its own. Then it asks for this computer's name, the other computer's address and your devices.
+You can ask your AI assistant to install it by following [AGENTS.md](AGENTS.md). It sets up both computers with commands and stops to tell you whenever you need to do something yourself (press the monitor's buttons, confirm as administrator, turn on Remote Login…).
+
+Installing by hand is simple too; do it once on each computer:
 
 - **Mac** ([mac/README-mac.md](mac/README-mac.md)): run `brew install m1ddc displayplacer`, then run `./install.sh` in the `mac/` folder.
-- **Windows** ([README-windows.md](README-windows.md)): run `install.cmd`, then `%USERPROFILE%\ScreenSwitch\ScreenSwitchCli.exe setup`.
+- **Windows** ([README-windows.md](README-windows.md)): run `install.cmd`.
 
-**Authorize each other (optional).** Setup prints this computer's public key and the command to run on the other computer. On a Mac, that command is `~/screenctl/screenctl.sh authorize "<key>"`. On Windows, it is `setup-sshd.ps1 -PeerPubKey "<key>"` in an administrator PowerShell. Both platform guides walk through it.
+On first start the program opens a setup wizard. Switch the main screen to this computer with the monitor's buttons, choose the main screen, label what each of its inputs is connected to (this computer, the other computer, a device such as a game console, or nothing), then enter the other computer (you can skip this). Change anything later under "Settings…" in the menu.
 
-**Input codes** are the numbers the monitor uses for its inputs; the switch command sends one of them. Common values are 15 = DP 1 (many monitors use it for USB-C too), 16 = DP 2, 17 = HDMI 1 and 18 = HDMI 2, but monitors differ.
-- Each computer's own code is read automatically.
-- For a console or other device, pick the code from that list by the port it is plugged into.
-- If a code turns out wrong, the switch won't happen; fix it with `setup devices`.
+**Authorize each other (optional).** On the "Other computer" tab of the settings window, copy "This computer's public key" into "Other computer's public key" in the other computer's settings and click Authorize. Do it on both computers, then click "Test connection". Windows asks for administrator confirmation once; on a Mac, also turn on Remote Login in System Settings.
+
+**Input codes** are the numbers the monitor uses for its inputs; the switch command sends one of them. Common values are 15 = DisplayPort 1 (many monitors use it for USB-C too), 16 = DisplayPort 2, 17 = HDMI 1 and 18 = HDMI 2, but monitors differ.
+- The program reads the monitor's list of inputs and the one this computer is on.
+- You choose which input a console or other device is on in the settings. If it's wrong, the switch won't happen; change it there.
 
 ## Usage
 
-The tray or menu bar menu:
+The tray or menu bar menu is the same on both computers:
 
-| State | Menu items |
-|---|---|
-| Monitor is showing this computer | Give to <other computer>; one "Give to <device>" item per device |
-| Monitor is elsewhere | Take back; one item per device |
+```
+Take back main screen
+Switch to Switch
+──────────────
+Extend displays     ✓
+Main screen only
+──────────────
+Settings…
+Quit
+```
 
-When this computer has another screen, the menu also offers the layout after taking back and the "remember arrangement" switch. No hotkeys are set by default; the platform guides show how to set them in the config file.
+- When the monitor is showing this computer, the first item becomes "Switch to <other computer>" (missing if no other computer is set up). Then there is one "Switch to <device>" item per device.
+- The icon shows whether the main screen is on this computer: bright = yes, dimmed = no.
+- "Extend displays / Main screen only" is the layout after taking back; it isn't shown when there's only the main screen.
+- When something needs your attention (a hotkey is taken, the background program isn't running…), the icon gets a small exclamation mark and a "⚠ …" line appears at the top of the menu; click it to open the right place in the settings.
+- No hotkeys by default; record them on the "Hotkeys" tab of the settings.
+
+Remembering the screen arrangement, the log and starting at login are in the settings window.
 
 ## Known limitations
 
 - When the monitor is on a console or other device, a monitor that listens only on the active input can't be switched back by software. You have to press its button.
-- After switching to an input with no signal, some monitors don't fall back on their own and stay black until you press a button. That is why the menu says to turn the device on first.
+- After switching to an input with no signal, some monitors don't fall back on their own and stay black until you press a button. Turn a console or other device on before switching to it.
 - Two monitors of the same model can't be told apart.
 - Both systems may turn on Do Not Disturb while the monitor is mirrored: macOS does this when mirroring, and according to Microsoft's docs Windows 11 does it by default when duplicating displays. Notifications may then only show up in the notification center.
-- The Mac's "shared monitor only" mode turns off the built-in screen with the undocumented `CGSConfigureDisplayEnabled`, which a future macOS may break.
+- The Mac's "Main screen only" mode turns off the built-in screen with the undocumented `CGSConfigureDisplayEnabled`, which a future macOS may break.
 - Proxy tools that take over `.local` names (fake-IP) block SSH to the other computer and need an exception. The platform guides' FAQs explain how.
 
 ## Security
@@ -132,7 +147,8 @@ When this computer has another screen, the menu also offers the layout after tak
   - adds the other computer's key to `administrators_authorized_keys`, keeping the other keys there and making a backup first.
 
   Make sure you're fine with these changes before running it.
-- On a Mac, turn on Remote Login, preferably allowed for the current user only (System Settings → General → Sharing → Remote Login). `authorize` only replaces earlier entries for the same key and keeps the others.
+- On a Mac, turn on Remote Login, preferably allowed for the current user only (System Settings → General → Sharing → Remote Login). Authorize (`authorize`) only replaces earlier entries for the same key and keeps the others.
+- To read the monitor's list of inputs, the Mac uses macOS's undocumented IOAVService functions (the same ones m1ddc uses). It only sends the DDC/CI Capabilities Request and doesn't change any monitor setting.
 
 ## Tested hardware
 

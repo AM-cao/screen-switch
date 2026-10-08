@@ -294,3 +294,206 @@ setup.summary-devices	设备 {0}	devices {0}
 setup.summary-no-devices	没有其他设备	no other devices
 setup.unknown	未知	unknown
 cli.usage	用法：ScreenSwitchCli.exe <命令>\n  setup                             交互式设置：主屏、本机、另一台电脑、\n                                    设备；写入 config.json 并重启托盘程序\n  setup devices                     只改设备列表：改名、删除、添加\n  status                            以 JSON 输出全部状态（给智能体用）\n  detect [--main <型号>]            检测主屏、本机所接的输入口和屏幕组合\n  ports                             主屏的各个输入口以及每个口接了什么（JSON）\n  peer set|clear|test               另一台电脑（set --os --host --user [--name]）\n  pubkey                            打印本机的 SSH 公钥（没有就生成一个）\n  authorize "<密钥>"                授权另一台电脑的密钥（需要管理员）\n  device add|rename|remove          接在其他输入口上的设备\n  set <键> <值>                     owned-layout、auto-save、direct-take、hotkey、after-take\n  autostart on|off                  登录时自动运行\n  request give peer                 请正在运行的托盘程序把主屏切给另一台电脑\n  request give code <n>             ……切给输入口编码为 n 的设备（十进制，必须在设备列表里）\n  request give self                 ……或重新应用本机的布局\n                                    （退出码 0 已接受，2 主屏不在本机，3 没有运行，1 目标有误 / 设备未知）\n  request take                      另一台电脑要切回这里：立即恢复布局（退出码 0 成功，3 没有运行）\n  request info                      打印本机的编码、名字和设备（一行，名字为 Base64）\n  diag                              列出显示器并检查主显示器的 DDC/CI\n  ddc-read                          读主显示器的输入源（VCP 0x60）\n  ddc-write <十六进制>              切换主显示器的输入源\n  layout-show                       当前的显示路径和模式\n  layout-mode                       当前模式和排列签名（只读）\n  layout-save                       把当前的扩展布局存为快照\n  layout-take                       应用快照（扩展，两块屏）\n  layout-take-main                  只留主屏（副屏关闭）\n  layout-release                    把副屏的桌面克隆到两块屏上\n  icon-dump <目录>                  把托盘图标写成 PNG 文件\n  ui-dump <目录> [zh|en]            把菜单、设置窗口和向导画成 PNG 文件（演示数据）	usage: ScreenSwitchCli.exe <command>\n  setup                             interactive setup: main screen, this computer, the other\n                                    computer, devices; writes config.json and restarts the tray app\n  setup devices                     only the device list: rename, delete, add\n  status                            all state as JSON (for agents)\n  detect [--main <model>]           detect the main screen, this computer's input and the screen combination\n  ports                             the main screen's inputs and what is connected to each (JSON)\n  peer set|clear|test               the other computer (set --os --host --user [--name])\n  pubkey                            print this computer's SSH public key (creates one if missing)\n  authorize "<key>"                 authorise the other computer's key (needs administrator)\n  device add|rename|remove          devices on the other inputs\n  set <key> <value>                 owned-layout, auto-save, direct-take, hotkey, after-take\n  autostart on|off                  start at login\n  request give peer                 ask the running tray app to switch the main screen to the other computer\n  request give code <n>             ... to the device on input code n (decimal, must be in the device list)\n  request give self                 ... or to re-apply this computer's layout\n                                    (exit 0 accepted, 2 not owned, 3 not running, 1 bad target / unknown device)\n  request take                      the other computer is about to switch here: restore the layout now (exit 0 ok, 3 not running)\n  request info                      print this computer's code, name and devices (one line, names in Base64)\n  diag                              list monitors and check DDC/CI on the main monitor\n  ddc-read                          read the main monitor's input source (VCP 0x60)\n  ddc-write <hex>                   switch the main monitor's input source\n  layout-show                       active display paths and current mode\n  layout-mode                       current mode and arrangement signatures (read-only)\n  layout-save                       save the current extended layout as the snapshot\n  layout-take                       apply the snapshot (extended, both screens)\n  layout-take-main                  main screen only (secondary off)\n  layout-release                    clone the secondary's desktop onto both screens\n  icon-dump <dir>                   write the tray icons as PNG files\n  ui-dump <dir> [zh|en]             draw the menu, settings and wizard to PNG files (demo data)
+# ---- Mac
+cli.done	已完成。	Done.
+mac.hint.button	请用显示器上的按钮切换输入源	Use the buttons on the monitor to switch inputs
+mac.err.notConfigured	还没有设置过：请在设置向导里完成设置，或运行 screenctl.sh detect	Not set up yet: finish the setup wizard or run screenctl.sh detect
+mac.err.secondExternal	另一块屏是外接屏，不支持关闭	The other screen is an external display and can't be turned off
+mac.err.laptopNoRestore	笔记本屏无法恢复，请合上再打开笔记本盖子	The laptop screen didn't come back. Close and reopen the lid
+mac.err.noHelper	缺少 {0}，请重新运行 install.sh	{0} is missing. Run install.sh again
+mac.err.noLaptopId	找不到笔记本屏的显示编号	Can't find the laptop screen's display ID
+mac.err.laptopOffFailed	关闭笔记本屏失败	Couldn't turn off the laptop screen
+mac.err.laptopStillOn	关闭笔记本屏后它仍在	The laptop screen is still on after turning it off
+mac.err.noExtendLayout	没有保存的扩展排列：请让主屏显示这台电脑、切到扩展后重新检测	No saved arrangement: show this computer on the main screen, extend the displays and detect again
+mac.err.layoutStuck	displayplacer 执行后布局仍为 {0}	The layout is still {0} after displayplacer
+mac.notify.withReason	{0}：{1}	{0}: {1}
+mac.notify.soloFailed	无法关闭笔记本屏，已按扩展显示：{0}	Couldn't turn off the laptop screen, extended the displays instead: {0}
+mac.notify.takeLayoutFailed	拿回主屏时布局切换失败	Couldn't change the layout when taking back the main screen
+mac.notify.releaseLayoutFailed	让出主屏时布局切换失败	Couldn't change the layout when giving away the main screen
+mac.notify.busy	正在切换中，已忽略新的请求	Already switching; the new request was ignored
+mac.notify.ddcWriteFailed	写入 DDC 失败，切换未生效	Couldn't send the command to the monitor; nothing was switched
+mac.notify.switchNoEffect	切换未生效：主屏仍在本机	The switch didn't happen: the main screen is still on this computer
+mac.notify.peerCodeUnknown	不知道 {0} 接在主屏的哪个输入口，请在设置的“输入口”里标出	Don't know which input {0} is connected to. Mark it in Settings → Inputs
+mac.notify.noSignal	没有检测到 {0} 的信号	No signal from {0}
+mac.notify.askedBack	已请求 {0} 交还主屏	Asked {0} to hand back the main screen
+mac.notify.noPeerTake	没有配置对方电脑，无法请它交还主屏。{0}	No other computer is set up to hand back the main screen. {0}
+mac.notify.peerNotOwner	{0} 也不占有主屏。主屏在其他设备上，{1}	{0} doesn't have the main screen either; it's on another device. {1}
+mac.notify.peerDaemonDown	{0} 端守护程序未运行。{1}	ScreenSwitch isn't running on {0}. {1}
+mac.notify.peerUnreachable	连接不到 {0}。{1}	Can't reach {0}. {1}
+mac.notify.peerRefused	{0} 拒绝了请求（退出码 {1}）。{2}	{0} refused the request (exit code {1}). {2}
+mac.notify.askedDevice	已请求 {0} 切给 {1}	Asked {0} to switch to {1}
+mac.notify.noPeerDevice	没有配置对方电脑，无法请它切给 {0}。{1}	No other computer is set up to switch to {0}. {1}
+mac.notify.peerNoDevice	{0} 拒绝了请求：它那边可能没有配置 {1}（编码 {2}）	{0} refused the request: it may not have {1} (input {2}) set up
+mac.notify.nobodyOwns	主屏不在任何一台电脑上，无法代为切换。{0}	The main screen isn't on either computer, so neither can switch it. {0}
+mac.notify.peerDaemonDownDevice	{0} 端守护程序未运行，无法代为切给 {1}	ScreenSwitch isn't running on {0}, so it can't switch to {1}
+mac.notify.peerUnreachableDevice	连接不到 {0}，无法代为切给 {1}	Can't reach {0} to switch to {1}
+mac.notify.peerRefusedShort	{0} 拒绝了请求（退出码 {1}）	{0} refused the request (exit code {1})
+mac.notify.notOwnedGivePeer	主屏不在本机，无法切给 {0}。{1}	The main screen isn't on this computer, so it can't be switched to {0}. {1}
+mac.notify.alreadyOwned	主屏已在本机	The main screen is already on this computer
+mac.notify.peerDidNotReturn	{0} 没有交还主屏。{1}	{0} didn't hand back the main screen. {1}
+mac.err.mirrored	当前是镜像	The displays are mirrored
+mac.err.mainAbsent	当前拓扑里没有主屏	The main screen isn't connected right now
+mac.err.noSecond	当前排列里没有另一块屏	The other screen isn't in the current arrangement
+mac.notify.saveFailed	无法保存排列：{0}	Couldn't save the arrangement: {0}
+mac.notify.autoSaved	已自动记住新的屏幕排列	Remembered the new screen arrangement
+mac.notify.saved	已记住当前屏幕排列	Remembered the current screen arrangement
+mac.err.mainOnlyUnsupported	另一块屏不是笔记本自带屏，不支持“只用主屏”	“Main screen only” needs the other screen to be the laptop's built-in screen
+mac.err.intel	只支持 Apple 芯片的 Mac（m1ddc 不支持 Intel Mac）	Only Macs with Apple silicon are supported (m1ddc doesn't support Intel Macs)
+mac.err.noTools	请先运行：brew install m1ddc displayplacer	Run this first: brew install m1ddc displayplacer
+mac.err.lidClosed	笔记本合着盖子：请打开盖子再检测，设置好以后合盖使用不受影响	The lid is closed: open it and detect again. Using the Mac with the lid closed afterwards is fine
+mac.err.noMonitor	没有找到能用软件控制的显示器。可能是：显示器菜单里没开 DDC/CI；线路或扩展坞不传 DDC；主屏此刻没在显示这台电脑	No monitor that software can control was found. Possible reasons: DDC/CI is off in the monitor's menu; the cable or dock doesn't pass DDC; the main screen isn't showing this computer right now
+mac.err.manyMonitors	有几块显示器都能用软件控制，请用 --main <型号> 指定主屏，候选：	Several monitors can be controlled. Choose the main screen with --main <model>. Candidates:
+mac.err.monitorNotFound	找不到显示器 {0}	Monitor {0} not found
+mac.err.noMainId	无法确定主屏在系统里的编号	Can't find the main screen's system ID
+mac.err.tooManyScreens	这台电脑接了三块及以上的屏，暂不支持	Three or more screens on this computer aren't supported yet
+mac.err.needExtend	{0}。请让主屏显示这台电脑、切到扩展后重新检测	{0}. Show this computer on the main screen, extend the displays and detect again
+mac.err.badKey	公钥格式不对：应形如 ssh-ed25519 AAAA… 注释	That isn't a public key: it should look like ssh-ed25519 AAAA… comment
+mac.err.writeFailed	写入 {0} 失败	Couldn't write {0}
+mac.err.badCode	编码 {0} 不对：要是 1 到 255 之间的数字	Input code {0} is invalid: it must be a number from 1 to 255
+mac.err.badHotkey	快捷键 {0} 无法识别：要有 ctrl、opt、shift、cmd 中至少一个，加一个数字或字母，如 ctrl+opt+1	Can't read hotkey {0}: use at least one of ctrl, opt, shift, cmd plus a digit or letter, e.g. ctrl+opt+1
+mac.err.codeIsPeer	编码 {0} 是 {1} 在用的口	Input {0} is the one {1} uses
+mac.err.codeIsSelf	编码 {0} 是这台电脑在用的口	Input {0} is the one this computer uses
+mac.err.codeTaken	编码 {0} 已经登记为 {1}	Input {0} is already registered as {1}
+mac.err.emptyName	名字不能为空	The name can't be empty
+mac.err.hotkeyTaken	快捷键 {0} 已经给了别的动作	Hotkey {0} is already used by another action
+mac.err.keygenFailed	生成 SSH 密钥失败	Couldn't create an SSH key
+mac.err.nameTaken	已经有叫 {0} 的设备	There's already a device called {0}
+mac.err.noAgentTemplate	找不到 {0}，请重新运行 install.sh	{0} is missing. Run install.sh again
+mac.err.noDevice	编码 {0} 没有登记设备	No device is registered on input {0}
+mac.err.noPeer	还没有设置对方电脑	The other computer isn't set up
+mac.err.peerTestFailed	连不上 {0}：{1}	Can't connect to {0}: {1}
+mac.screen.builtin	笔记本自带屏	Built-in screen
+mac.usage.title	用法：{0} <命令>	Usage: {0} <command>
+mac.usage.status	状态（JSON）	status (JSON)
+mac.usage.detect	用法：screenctl.sh detect [--main <型号>]	usage: screenctl.sh detect [--main <model>]
+mac.usage.detectHelp	检测主屏、本机编码、屏幕组合并写入	detect the main screen, this computer's input and the screens, and save them
+mac.usage.ports	用法：screenctl.sh ports	usage: screenctl.sh ports
+mac.usage.portsHelp	主屏的输入口及登记的内容（JSON）	the main screen's inputs and what is registered on each (JSON)
+mac.usage.peer	用法：screenctl.sh peer set --os <windows|mac> --host <地址> --user <用户名> [--name <名字>] | peer clear | peer test | peer code <编码>|none	usage: screenctl.sh peer set --os <windows|mac> --host <host> --user <user> [--name <name>] | peer clear | peer test | peer code <n>|none
+mac.usage.pubkeyHelp	本机公钥，没有就先生成	this computer's public key (created if missing)
+mac.usage.authorizeHelp	允许对方电脑用这把公钥连过来	let the other computer connect with this key
+mac.usage.device	用法：screenctl.sh device add <编码> <名字> | device rename <编码> <名字> | device remove <编码>	usage: screenctl.sh device add <n> <name> | device rename <n> <name> | device remove <n>
+mac.usage.set	用法：screenctl.sh set owned-layout extend|main-only | auto-save on|off | direct-take on|off | hotkey peer|<编码> <组合>|none	usage: screenctl.sh set owned-layout extend|main-only | auto-save on|off | direct-take on|off | hotkey peer|<n> <combo>|none
+mac.usage.hotkeyExample	组合如 ctrl+opt+1	combo e.g. ctrl+opt+1
+mac.usage.autostart	用法：screenctl.sh autostart on|off	usage: screenctl.sh autostart on|off
+mac.usage.setupHelp	一问一答的设置	question-and-answer setup
+mac.usage.give	用法：screenctl.sh give peer | self | <设备名或编码>	usage: screenctl.sh give peer | self | <device name or code>
+mac.usage.giveHelp	切给对方 / 拿回 / 切给某个设备	switch to the other computer / take back / switch to a device
+mac.setup.colon	：	: 
+mac.setup.detected	主屏：{0}，这台电脑接在编码 {1} 的输入口	Main screen: {0}; this computer is on input {1}
+mac.setup.selfTitle	== 本机 ==	== This computer ==
+mac.setup.askSelfName	这台电脑在菜单和提示里叫什么	Name of this computer in menus and messages
+mac.setup.peerTitle	== 对方电脑 ==	== Other computer ==
+mac.setup.peerHelp	填了对方电脑，两台才能互相代为切换。没有，或者暂时不配：主机名填 - 。	With the other computer set up, each can switch for the other. To skip, enter - as the host.
+mac.setup.askHost	对方电脑的主机名（如 my-pc.local）或局域网 IP	Other computer's host name (e.g. my-pc.local) or LAN IP
+mac.setup.askOs	对方是 Windows 还是 Mac（输入 windows 或 mac）	Is it Windows or Mac (type windows or mac)
+mac.setup.askPeerName	对方电脑在菜单和提示里叫什么	Name of the other computer in menus and messages
+mac.setup.askUser	对方电脑上的用户名	User name on the other computer
+mac.setup.askProg	对方电脑上本程序的路径	Path of this program on the other computer
+mac.setup.askKeygen	本机还没有 SSH 密钥（{0}），现在生成吗（y / n）	This computer has no SSH key ({0}) yet. Create one now (y / n)
+mac.setup.keygenDone	已生成	Created
+mac.setup.selfKey	本机的公钥：	This computer's public key:
+mac.setup.authorizeOnWindows	在 {0} 上用管理员 PowerShell、在仓库目录里运行：	On {0}, in an administrator PowerShell in the repository folder, run:
+mac.setup.authorizeOnMac	在 {0} 上运行：	On {0}, run:
+mac.setup.authorizeHere	拿到 {0} 的公钥后，在本机运行：{1} authorize "<它的公钥>"	Once you have {0}'s public key, run here: {1} authorize "<its public key>"
+mac.setup.remoteLogin	并在 系统设置 → 通用 → 共享 里打开“远程登录”。	Also turn on Remote Login in System Settings → General → Sharing.
+mac.setup.asking	正在向 {0} 询问它的输入口编码和设备列表…	Asking {0} for its input and devices…
+mac.setup.peerCode	{0} 接在编码 {1} 的输入口	{0} is on input {1}
+mac.setup.peerDevice	从 {0} 读到设备：{1}（编码 {2}）	Got a device from {0}: {1} (input {2})
+mac.setup.peerOffline	现在连不上 {0}（SSH 还没配好也没关系）。	Can't reach {0} now (fine if SSH isn't set up yet).
+mac.setup.askPeerCode	{0} 接在主屏的哪个输入口（编码；不知道就直接回车，以后切换时会自动询问）	Which input of the main screen is {0} on (code; press Return if unknown, it will be asked when switching)
+mac.setup.devicesTitle	== 其他设备（游戏机等）==	== Other devices (game consoles etc.) ==
+mac.setup.devicesNow	现在的设备：	Current devices:
+mac.setup.deviceLine	{0}（编码 {1}）	{0} (input {1})
+mac.setup.askRemove	要删除哪几个（输入编号，空格分隔；改名请先删除再添加；都保留就直接回车）	Which to remove (numbers separated by spaces; to rename, remove and add again; press Return to keep all)
+mac.setup.removed	已删除：{0}	Removed: {0}
+mac.setup.codesHelp	主屏的每个输入口有一个编码。常见的是：15 = DP 1（不少显示器的 USB-C 也用它）、16 = DP 2、17 = HDMI 1、18 = HDMI 2。	Each input of the main screen has a code. Common ones: 15 = DP 1 (many monitors use it for USB-C too), 16 = DP 2, 17 = HDMI 1, 18 = HDMI 2.
+mac.setup.codesInUse	本机用的是 {0}。	This computer uses {0}.
+mac.setup.codesInUsePeer	本机用的是 {0}，{1} 用的是 {2}。	This computer uses {0}; {1} uses {2}.
+mac.setup.askDeviceName	要添加的设备的名字（不添加就直接回车）	Name of a device to add (press Return to finish)
+mac.setup.askDeviceCode	{0} 接的输入口编码	Input code {0} is on
+mac.setup.badCode	编码要是 1 到 255 之间的数字，没有添加	The code must be a number from 1 to 255; not added
+mac.setup.codeIsComputer	编码 {0} 是电脑在用的口，没有添加	Input {0} is used by a computer; not added
+mac.setup.codeTaken	编码 {0} 已经有设备了，没有添加	Input {0} already has a device; not added
+mac.setup.added	已添加：{0}（编码 {1}）	Added: {0} (input {1})
+mac.setup.written	已写入 {0}	Saved {0}
+common.cancel	取消	Cancel
+menu.takeBack	拿回主屏	Take back main screen
+menu.switchTo	切给 {0}	Switch to {0}
+menu.mainOnly	只用主屏	Main screen only
+menu.problem.notConfigured	还没有完成设置	Setup isn't finished
+menu.problem.daemonDown	后台程序没在运行	The background program isn't running
+menu.problem.hotkey	快捷键 {0} 没有生效	Hotkey {0} isn't working
+mac.menu.problem.notifications	通知没有打开	Notifications are turned off
+ports.mainScreen	主屏：{0}	Main screen: {0}
+ports.mainNone	还没有选主屏	No main screen chosen yet
+ports.redetect	重新检测	Detect again
+ports.detecting	正在检测…	Detecting…
+ports.detected	已重新检测	Detected again
+ports.chooseMain	有几块显示器都能用软件控制，哪一块是两台电脑共用的主屏？	Several monitors can be controlled. Which one is the main screen the two computers share?
+ports.header.port	输入口	Input
+ports.header.use	接的是	Connected to
+ports.named	{0}（{1}）	{0} ({1})
+ports.code	编码 {0}	Code {0}
+ports.use.self	这台电脑（自动）	This computer (automatic)
+ports.use.peer	对方电脑	Other computer
+ports.use.peerNamed	对方电脑（{0}）	Other computer ({0})
+ports.use.device	设备	Device
+ports.use.none	没接	Nothing
+ports.deviceName	设备的名字，如 Switch	Device name, e.g. Switch
+ports.addPrompt	输入口的编码（1–255）	Input code (1–255)
+ports.badCode	编码 {0} 不对：要是 1 到 255 之间的数字	Code {0} is invalid: it must be a number from 1 to 255
+ports.exists	编码 {0} 已经在表里了	Code {0} is already in the list
+ports.needName	{0} 选了设备，请填上设备的名字	{0} is set to a device; enter the device's name
+ports.dupName	有两个设备都叫 {0}	Two devices are called {0}
+ports.help	编码对应关系：15 = DisplayPort 1、16 = DisplayPort 2、17 = HDMI 1、18 = HDMI 2（不少显示器的 USB-C 也用 15）；其他编码看显示器说明书。	Codes: 15 = DisplayPort 1, 16 = DisplayPort 2, 17 = HDMI 1, 18 = HDMI 2 (many monitors use 15 for USB-C too); for other codes see the monitor's manual.
+ports.unknownList	读不出显示器的输入口清单，这里只列出已登记的口；其他口请点“添加输入口”手动添加。	Couldn't read the monitor's list of inputs, so only registered inputs are shown. Use “Add input” for the others.
+peer.hostHint	主机名或 IP	host name or IP
+peer.incomplete	填好地址和用户名后生效	Takes effect once the address and user name are filled in
+peer.needHost	请填好对方电脑的地址和用户名	Enter the other computer's address and user name
+peer.selfKey	这台电脑的公钥	This computer's public key
+peer.selfKeyHelp	把它粘贴到对方电脑设置窗口的“对方公钥”里，点“授权”。两台电脑之间怎么传由你决定（共享剪贴板、发给自己的消息等）。	Paste it into “Other computer's public key” in the other computer's settings and click Authorize. Move it between the computers any way you like (shared clipboard, a message to yourself…).
+peer.peerKey	对方公钥	Other computer's public key
+mac.peer.remoteLogin	还要在 系统设置 → 通用 → 共享 里打开“远程登录”，对方电脑才能连过来。	Also turn on Remote Login in System Settings → General → Sharing so the other computer can connect.
+mac.peer.openSharing	打开共享设置	Open Sharing settings
+peer.testOk	已连上 {0}，它接在 {1}	Connected to {0}; it's on {1}
+peer.testOkNoCode	已连上 {0}，它还不知道自己接在主屏的哪个口	Connected to {0}; it doesn't know which input it's on yet
+peer.testMismatch	输入口页标的是 {0}，与对方说的 {1} 不一致，已改为 {1}	The Inputs tab said {0} but it reports {1}; changed to {1}
+screens.combo.builtin	主屏 + 笔记本自带屏	Main screen + the laptop's built-in screen
+screens.combo.external	主屏 + 另一块外接屏	Main screen + another external display
+screens.combo.none	只接了主屏	Only the main screen
+screens.afterTake	拿回主屏后	After taking back the main screen
+screens.autoSave	自动记住屏幕排列	Remember the screen arrangement automatically
+screens.autoSaveHelp	在系统设置里拖动两块屏的位置后，自动记住，下次拿回时按这个位置恢复。	After you drag the two screens around in System Settings, their positions are remembered and restored the next time you take back the main screen.
+screens.saveNow	现在记住当前排列	Remember the current arrangement now
+screens.saveNowHelp	把两块屏现在的位置记下来，拿回主屏时按它恢复。主屏要在这台电脑上、两块屏是扩展的。	Saves the current positions of the two screens to restore when taking back. The main screen must be on this computer, with the displays extended.
+hotkeys.help	默认没有快捷键。点按钮后按下组合键即可录下：要有 ⌃ ⌥ ⇧ ⌘ 中至少一个，加一个数字或字母；Esc 取消。	No hotkeys by default. Click a button, then press the keys: at least one of ⌃ ⌥ ⇧ ⌘ plus a digit or letter; Esc cancels.
+hotkeys.peer	切给对方 / 拿回主屏	Switch to other / take back
+hotkeys.placeholder	点这里录制	Click to record
+hotkeys.recording	请按组合键…	Press the keys…
+general.rerunWizard	重新运行设置向导	Run the setup wizard again
+general.openLog	打开日志	Open log
+general.directTake	先直接切换	Try switching directly first
+general.directTakeHelp	拿回主屏时先直接向显示器发切换指令（有的显示器在没显示这台电脑时也接受），不行再请对方电脑代发。	When taking back, first send the switch command straight to the monitor (some accept it even when showing another input), then ask the other computer.
+general.openConfigFolder	打开配置文件所在的文件夹	Open the configuration folder
+mac.general.restartDaemon	重新启动后台程序	Restart the background program
+mac.general.openNotifications	打开通知设置	Open Notifications settings
+wizard.step	第 {0} 步，共 {1} 步	Step {0} of {1}
+wizard.welcome.body	屏幕切换让两台电脑（以及游戏机等设备）共用一台显示器：点一下菜单就把显示器切过去，桌面布局自动跟着变。接下来几步选主屏、标出它的输入口、填上另一台电脑。	ScreenSwitch lets two computers (and devices such as game consoles) share one monitor: one click in the menu switches the monitor, and the desktop layout follows. The next steps choose the main screen, label its inputs and set up the other computer.
+wizard.main.intro	选择两台电脑共用的那台显示器（主屏）。	Choose the monitor the two computers share (the main screen).
+wizard.main.controllable	能用软件控制	software can control it
+wizard.main.notControllable	不能用软件控制	software can't control it
+wizard.main.scanFailed	检测失败，请点“重新检测”	Detection failed; click “Detect again”
+wizard.main.selfPort	这台电脑接在 {0}	This computer is on {0}
+wizard.main.second	主屏切走时，桌面放到 {0} 上	When the main screen switches away, the desktop moves to {0}
+wizard.main.noSecond	这台电脑只接了主屏，主屏切走时不调整桌面	This computer only has the main screen; the desktop isn't rearranged when it switches away
+mac.wizard.lidClosed	笔记本合着盖子：请打开盖子后点“重新检测”。设置好以后合盖使用不受影响。	The lid is closed: open it and click “Detect again”. Using the Mac with the lid closed afterwards is fine.
+wizard.ports.intro	标出主屏每个输入口接的是什么。这台电脑的口已自动填好。	Label what is connected to each input of the main screen. This computer's input is filled in automatically.
+wizard.ports.reading	正在读取显示器的输入口…	Reading the monitor's inputs…
+wizard.peer.intro	填了另一台电脑，两台才能互相代为切换。没有，或者以后再配，点“跳过”。	With the other computer set up, each can switch the monitor for the other. If there isn't one, or to do it later, click Skip.
+wizard.peer.portMarked	已在输入口里标出它的口。	Its input has been marked on the Inputs page.
+wizard.summary.portUnknown	还不知道的口（切换时会自动询问）	an input not known yet (asked when switching)
+wizard.summary.noPeer	对方电脑：不连	Other computer: none
+wizard.summary.noDevices	设备：无	Devices: none
+wizard.finishing	正在写入设置…	Saving the settings…
+wizard.finishFailed	没有完成：{0}	Not finished: {0}

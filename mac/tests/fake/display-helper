@@ -5,7 +5,7 @@
 S=$FAKE_DIR
 T=$(cat $S/topology 2>/dev/null); [ -n "$T" ] || T=builtin
 # 改动布局的调用（含失败的）记入 $FAKE_DIR/order.log
-case "$1" in list|mode) ;; *) echo "helper $*" >> $S/order.log ;; esac
+case "$1" in list|mode|caps) ;; *) echo "helper $*" >> $S/order.log ;; esac
 case "$1" in
   list) m=0
         second_on=1
@@ -15,10 +15,10 @@ case "$1" in
           solo) second_on=0 ;;
         esac
         [ "$(cat $S/layout 2>/dev/null)" = mirror ] && [ $second_on = 1 ] && m=1
-        [ -f $S/absent ] || echo "3 builtin=0 active=1 mirror=$m uuid=AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        [ -f $S/absent ] || echo "3 builtin=0 active=1 mirror=$m uuid=AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE name=P275MV"
         if [ $second_on = 1 ]; then
-          if [ "$T" = builtin ]; then echo "1 builtin=1 active=1 mirror=$m uuid=11111111-2222-3333-4444-555555555555"
-          else echo "5 builtin=0 active=1 mirror=$m uuid=EEEEEEEE-FFFF-0000-1111-222222222222"; fi
+          if [ "$T" = builtin ]; then echo "1 builtin=1 active=1 mirror=$m uuid=11111111-2222-3333-4444-555555555555 name=Color LCD"
+          else echo "5 builtin=0 active=1 mirror=$m uuid=EEEEEEEE-FFFF-0000-1111-222222222222 name=SIDE 24"; fi
         fi ;;
   # $FAKE_DIR/degraded：主屏正在重新枚举，模式列表里没有保存的模式（就绪探测失败）
   mode) [ -f $S/degraded ] && exit 4; echo "current 1470x956@160"; echo "match $4x$5@$6" ;;
@@ -27,5 +27,8 @@ case "$1" in
   enable-mirror) [ -f $S/helper_fail ] && exit 4; echo "$(date +%T) enable-mirror $2 $3" >> $S/helper.log; rm -f $S/laptop_off; echo mirror > $S/layout ;;
   solo) { [ -f $S/helper_fail ] || [ -f $S/solo_fail ]; } && exit 4
         echo "$(date +%T) solo $2 $3 $4 $5 $6 $7" >> $S/helper.log; touch $S/laptop_off; echo extend > $S/layout ;;
+  # capabilities：主屏显示本机时读得出（输入口 15–18）；$FAKE_DIR/caps_fail 存在时读不出
+  caps) [ "$2" = AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE ] && [ "$(cat ${FAKE_MON:-$S}/input)" = "${FAKE_SELF:-15}" ] && [ ! -f $S/caps_fail ] || exit 6
+        echo "(prot(monitor)type(lcd)cmds(01 02 03 07 0C E3 F3)vcp(02 04 05 10 12 14(05 06 08 0B) 60(0F 10 11 12) 62 D6(01 04 05))mccs_ver(2.1))" ;;
   *) exit 64 ;;
 esac

@@ -21,7 +21,7 @@ write_env() {   # $1 = a | b，$2 = 本机所接输入口的编码，$3 = 对方
 export FAKE_DIR=$ROOT/$1 FAKE_MON=$MON FAKE_SELF=$2 FAKE_NOSIGNAL="" FAKE_SSH_RC=0 FAKE_SSH_SLEEP=0 FAKE_SSH_OUT=""
 export SCREENCTL_DIR=$ROOT/$1/home SCREENCTL_NOTIFY_FILE=$ROOT/$1/notify.txt
 export M1DDC=$FAKE/m1ddc DISPLAYPLACER=$FAKE/displayplacer SSH_BIN=$FAKE/ssh DISPLAY_HELPER=$FAKE/display-helper IOREG=$FAKE/ioreg
-export FAKE_SRC=$SRC FAKE_PEER_ENV=$ROOT/$3.env
+export FAKE_SRC=$SRC FAKE_PEER_ENV=$ROOT/$3.env SCREENSWITCH_LANG=zh
 EOF
 }
 write_env a 15 b

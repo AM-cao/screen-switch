@@ -83,6 +83,7 @@ OWNED_LAYOUT=extend  # 拿回后的布局：extend = 扩展；external = 仅大�
 LAPTOP_CGID=1        # 笔记本屏的系统显示编号（CGDirectDisplayID），关屏后要靠它开回来；init 与关屏时学习
 AUTO_SAVE_LAYOUT=1   # 1 = 占有且扩展时自动记住用户改过的屏幕排列
 AUTO_SAVE_POLLS=5    # 每 5 次轮询（约 10 秒）比对一次排列，连续两次一致才保存
+MAIN_PORTS=""        # 主屏 capabilities 里 VCP 0x60 的取值（十进制，空格分隔），detect 读出；设置窗口的输入口表用
 # 旧版配置里的名字：只读不写，由 normalize_config 映射到上面的新名字
 LAPTOP_ID=""; CODE_WINDOWS=""; CODE_MAC=""; CODE_OTHER=""; WIN_HOST=""; WIN_USER=""; WIN_EXE=""
 
@@ -113,8 +114,46 @@ load_config() {
 }
 load_config
 
+# ---- 中英文（docs/settings-ui-design.md 第 8 节）----
+# 给人看的文字取自文字表 strings.tsv：每行"编号<Tab>中文<Tab>英文"。安装后在 $SCREENCTL_DIR 里，
+# 在仓库里直接运行时取仓库根目录的 i18n/strings.tsv。语言跟随系统界面语言，zh 开头用中文，否则英文；
+# SCREENSWITCH_LANG=zh|en 可以指定。日志不翻译
+if [ -z "${SCREENCTL_STRINGS:-}" ]; then
+    SCREENCTL_STRINGS="$SCREENCTL_DIR/strings.tsv"
+    [ -f "$SCREENCTL_STRINGS" ] || SCREENCTL_STRINGS="$(cd "$(dirname "$0")" 2>/dev/null && pwd)/../i18n/strings.tsv"
+fi
+UI_COL=""
+
+ui_lang() {
+    local l=${SCREENSWITCH_LANG:-}
+    [ -n "$l" ] || l=$(defaults read -g AppleLanguages 2>/dev/null | sed -n '2{s/[^A-Za-z-]//g;p;}')
+    case "$l" in zh*) echo zh ;; *) echo en ;; esac
+}
+
+# t <编号> [参数…]：取当前语言的文字，{0} {1}… 换成参数，\n 换成换行。表里没有这个编号时输出编号本身
+t() {
+    local key=$1 s a i=0
+    shift
+    if [ -z "$UI_COL" ]; then
+        if [ "$(ui_lang)" = zh ]; then UI_COL=2; else UI_COL=3; fi
+    fi
+    s=$(awk -F'\t' -v k="$key" -v c="$UI_COL" '$1 == k { print $c; exit }' "$SCREENCTL_STRINGS" 2>/dev/null)
+    [ -n "$s" ] || s=$key
+    for a in "$@"; do
+        s=${s//"{$i}"/$a}
+        i=$((i + 1))
+    done
+    s=${s//\\n/$'\n'}
+    printf '%s' "$s"
+}
+
+# 命令成功的最后一行（docs/settings-ui-design.md 第 7 节）
+say_done() {
+    echo "$(t cli.done)"
+}
+
 # 软件切不回来时提示用户的话（主屏停在别的设备上时，只有显示器按钮能切回来）
-HINT_BUTTON="请用显示器上的按钮切换输入源"
+HINT_BUTTON=$(t mac.hint.button)
 
 # ---- 运行时状态 ----
 MODE=cli            # daemon | direct | cli
@@ -166,16 +205,20 @@ end run
 EOF
 }
 
+# 失败：打印一行"error: <原因>"，退出码 1（docs/settings-ui-design.md 第 7 节）
 die() {
-    echo "错误：$*" >&2
+    echo "error: $*" >&2
     exit 1
 }
 
+configured() {
+    [ -n "$MAIN_UUID" ]
+}
+
 need_config() {
-    [ -n "$MAIN_UUID" ] || die "缺少配置，请在主屏显示本机时运行：$0 setup"
+    configured || die "$(t mac.err.notConfigured)"
     [ "$LAYOUT" = none ] && return 0
-    [ -n "$MAIN_ID" ] && [ ${#MIRROR_ARGS[@]} -gt 0 ] \
-        || die "缺少配置，请在主屏显示本机且为扩展时运行：$0 setup"
+    [ -n "$MAIN_ID" ] && [ ${#MIRROR_ARGS[@]} -gt 0 ] || die "$(t mac.err.notConfigured)"
 }
 
 # 本机的名字：配置里没有就取电脑名
@@ -363,7 +406,7 @@ laptop_set() {
     # 另一块屏是外接屏时不去开关它：打开无事可做，关闭不支持
     if [ "$SECOND_BUILTIN" != 1 ]; then
         [ "$1" = enable ] && return 0
-        LAYOUT_ERR="另一块屏是外接屏，不支持关闭"
+        LAYOUT_ERR=$(t mac.err.secondExternal)
         return 1
     fi
     if [ "$1" = enable ]; then
@@ -373,19 +416,19 @@ laptop_set() {
             laptop_enabled && { log "layout: 已打开笔记本屏"; return 0; }
             sleep 0.5
         done
-        LAYOUT_ERR="笔记本屏无法恢复，请合上再打开笔记本盖子"
+        LAYOUT_ERR=$(t mac.err.laptopNoRestore)
         return 1
     fi
-    [ -x "$DISPLAY_HELPER" ] || { LAYOUT_ERR="缺少 $DISPLAY_HELPER，请重新运行 install.sh"; return 1; }
+    [ -x "$DISPLAY_HELPER" ] || { LAYOUT_ERR=$(t mac.err.noHelper "$DISPLAY_HELPER"); return 1; }
     id=$("$DISPLAY_HELPER" list 2>/dev/null | awk '/builtin=1/ {print $1; exit}')
-    is_int "$id" || { LAYOUT_ERR="找不到笔记本屏的显示编号"; return 1; }
+    is_int "$id" || { LAYOUT_ERR=$(t mac.err.noLaptopId); return 1; }
     remember_laptop_cgid "$id"
-    "$DISPLAY_HELPER" disable "$id" >> "$LOG" 2>&1 || { LAYOUT_ERR="关闭笔记本屏失败"; return 1; }
+    "$DISPLAY_HELPER" disable "$id" >> "$LOG" 2>&1 || { LAYOUT_ERR=$(t mac.err.laptopOffFailed); return 1; }
     for i in 1 2 3 4 5 6 7 8 9 10; do
         laptop_enabled || { log "layout: 已关闭笔记本屏"; return 0; }
         sleep 0.5
     done
-    LAYOUT_ERR="关闭笔记本屏后它仍在"
+    LAYOUT_ERR=$(t mac.err.laptopStillOn)
     return 1
 }
 
@@ -489,7 +532,7 @@ apply_layout() {
         log "layout: 未能直接从镜像进入仅大屏，改走 扩展→关笔记本屏"
     fi
     if [ "$want" != mirror ] && [ ${#EXTEND_ARGS[@]} -eq 0 ]; then
-        LAYOUT_ERR="未保存扩展排列，请在扩展状态下运行 screenctl.sh init"
+        LAYOUT_ERR=$(t mac.err.noExtendLayout)
         return 1
     fi
     laptop_set enable || return 1
@@ -508,7 +551,7 @@ apply_layout() {
         return 1
     fi
     [ "$mode" = "$want" ] && return 0
-    LAYOUT_ERR="displayplacer 执行后布局仍为 $mode"
+    LAYOUT_ERR=$(t mac.err.layoutStuck "$mode")
     return 1
 }
 
@@ -517,7 +560,7 @@ layout_failed() {
     log "layout: 失败 $LAYOUT_ERR"
     if [ $LAYOUT_FAIL_NOTIFIED -eq 0 ]; then
         LAYOUT_FAIL_NOTIFIED=1
-        notify "$1：$LAYOUT_ERR"
+        notify "$(t mac.notify.withReason "$1" "$LAYOUT_ERR")"
     fi
 }
 
@@ -557,10 +600,10 @@ do_take() {
         LAYOUT_AT=$(date +%s)
         write_state
         log "take: 关闭笔记本屏失败（$LAYOUT_ERR），按扩展拿回"
-        notify "无法关闭笔记本屏，已按扩展显示：$LAYOUT_ERR"
+        notify "$(t mac.notify.soloFailed "$LAYOUT_ERR")"
         return 0
     fi
-    layout_failed "拿回主屏时布局切换失败"
+    layout_failed "$(t mac.notify.takeLayoutFailed)"
     return 1
 }
 
@@ -580,7 +623,7 @@ do_release() {
         log "release: 已让出，owned=0"
         return 0
     fi
-    layout_failed "让出主屏时布局切换失败"
+    layout_failed "$(t mac.notify.releaseLayoutFailed)"
     return 1
 }
 
@@ -593,9 +636,11 @@ flow_sleep() {
     if [ "$MODE" = daemon ] && [ -f "$CMD" ]; then
         local c
         c=$(head -1 "$CMD" 2>/dev/null)
+        # 改配置的命令（reload、set、save-layout）留着，流程结束后照常处理
+        case "$c" in reload|"set "*|save-layout) sleep 0.5; return ;; esac
         rm -f "$CMD"
         log "busy: 忽略 [$c]"
-        notify "正在切换中，已忽略新的请求"
+        notify "$(t mac.notify.busy)"
     fi
     sleep 0.5
 }
@@ -653,12 +698,12 @@ give_to_code() {
     [ "$3" = peer ] && notify_peer_take
     log "give: 写入 $name ($code)"
     if ! ddc_write "$code"; then
-        notify "写入 DDC 失败，切换未生效"
+        notify "$(t mac.notify.ddcWriteFailed)"
         give_aborted
         return 1
     fi
     if ! wait_read_fail; then
-        notify "切换未生效：主屏仍在本机"
+        notify "$(t mac.notify.switchNoEffect)"
         give_aborted
         return 1
     fi
@@ -672,7 +717,7 @@ give_to_peer() {
         save_peer_code "$INFO_CODE"
     fi
     if [ -z "$CODE_PEER" ]; then
-        notify "不知道 $PEER_NAME 接在主屏的哪个输入口，请运行设置：screenctl.sh setup"
+        notify "$(t mac.notify.peerCodeUnknown "$PEER_NAME")"
         return 1
     fi
     give_to_code "$CODE_PEER" "$PEER_NAME" peer
@@ -686,7 +731,7 @@ give_to_device() {
     if observe_jump_back; then
         log "device: $name（$code）无信号，显示器已跳回"
         do_take
-        notify "没有检测到 $name 的信号"
+        notify "$(t mac.notify.noSignal "$name")"
         return 0
     fi
     log "device: $name（$code）有信号，切换完成"
@@ -742,7 +787,7 @@ take_back() {
         relay_give peer
         rc=$?
         if [ $rc -eq 0 ]; then
-            notify "已请求 $PEER_NAME 交还主屏"
+            notify "$(t mac.notify.askedBack "$PEER_NAME")"
             pre_take "$PEER_NAME 已接受 give peer"
             return 0
         fi
@@ -759,11 +804,11 @@ take_back() {
         direct_result fail
     fi
     case $rc in
-        -1) notify "没有配置对方电脑（config.sh 的 PEER_HOST、PEER_USER、PEER_PROG），无法请它交还主屏。$HINT_BUTTON" ;;
-        2) notify "$PEER_NAME 也不占有主屏。主屏在其他设备上，$HINT_BUTTON" ;;
-        3) notify "$PEER_NAME 端守护程序未运行。$HINT_BUTTON" ;;
-        255) notify "连接不到 $PEER_NAME。$HINT_BUTTON" ;;
-        *) notify "$PEER_NAME 拒绝了请求（退出码 $rc）。$HINT_BUTTON" ;;
+        -1) notify "$(t mac.notify.noPeerTake "$HINT_BUTTON")" ;;
+        2) notify "$(t mac.notify.peerNotOwner "$PEER_NAME" "$HINT_BUTTON")" ;;
+        3) notify "$(t mac.notify.peerDaemonDown "$PEER_NAME" "$HINT_BUTTON")" ;;
+        255) notify "$(t mac.notify.peerUnreachable "$PEER_NAME" "$HINT_BUTTON")" ;;
+        *) notify "$(t mac.notify.peerRefused "$PEER_NAME" "$rc" "$HINT_BUTTON")" ;;
     esac
     return 1
 }
@@ -788,7 +833,7 @@ ask_device() {
         relay_give code "$code"
         rc=$?
         if [ $rc -eq 0 ]; then
-            notify "已请求 $PEER_NAME 切给 $name"
+            notify "$(t mac.notify.askedDevice "$PEER_NAME" "$name")"
             return 0
         fi
     fi
@@ -797,12 +842,12 @@ ask_device() {
         return 0
     fi
     case $rc in
-        -1) notify "没有配置对方电脑，无法请它切给 $name。$HINT_BUTTON" ;;
-        1) notify "$PEER_NAME 拒绝了请求：它那边可能没有配置 $name（编码 $code）" ;;
-        2) notify "主屏不在任何一台电脑上，无法代为切换。$HINT_BUTTON" ;;
-        3) notify "$PEER_NAME 端守护程序未运行，无法代为切给 $name" ;;
-        255) notify "连接不到 $PEER_NAME，无法代为切给 $name" ;;
-        *) notify "$PEER_NAME 拒绝了请求（退出码 $rc）" ;;
+        -1) notify "$(t mac.notify.noPeerDevice "$name" "$HINT_BUTTON")" ;;
+        1) notify "$(t mac.notify.peerNoDevice "$PEER_NAME" "$name" "$code")" ;;
+        2) notify "$(t mac.notify.nobodyOwns "$HINT_BUTTON")" ;;
+        3) notify "$(t mac.notify.peerDaemonDownDevice "$PEER_NAME" "$name")" ;;
+        255) notify "$(t mac.notify.peerUnreachableDevice "$PEER_NAME" "$name")" ;;
+        *) notify "$(t mac.notify.peerRefusedShort "$PEER_NAME" "$rc")" ;;
     esac
     return 1
 }
@@ -814,7 +859,7 @@ give_peer_unowned() {
         ddc_write "$CODE_PEER"
         switched_to "$CODE_PEER" && { log "give: 直接切换生效"; return 0; }
     fi
-    notify "主屏不在本机，无法切给 $PEER_NAME。$HINT_BUTTON"
+    notify "$(t mac.notify.notOwnedGivePeer "$PEER_NAME" "$HINT_BUTTON")"
     return 1
 }
 
@@ -942,7 +987,7 @@ run_give() {
     case "$OWNED:$1" in
         1:peer) give_to_peer ;;
         1:code) give_to_device "$2" ;;
-        1:self) notify "主屏已在本机" ;;
+        1:self) notify "$(t mac.notify.alreadyOwned)" ;;
         0:self) take_back ;;
         0:code) ask_device "$2" ;;
         0:peer) give_peer_unowned ;;
@@ -1062,7 +1107,7 @@ poll() {
             if [ $GRACE_UNTIL -gt 0 ]; then
                 GRACE_UNTIL=0
                 log "poll: 宽限期满仍读不到主屏，让出"
-                notify "$PEER_NAME 没有交还主屏。$HINT_BUTTON"
+                notify "$(t mac.notify.peerDidNotReturn "$PEER_NAME" "$HINT_BUTTON")"
             fi
             log "poll: release（$LAST_READ）"
             do_release
@@ -1178,6 +1223,11 @@ claim_pidfile() {
 
 cmd_watch() {
     MODE=daemon
+    # 还没设置过（刚装好、向导还没走完）：等配置出现，不退出——launchd 会不停地重新拉起
+    while ! configured; do
+        sleep 2
+        load_config
+    done
     need_config
     mkdir -p "$SCREENCTL_DIR"
     claim_pidfile || { echo "watch 已在运行（pid $(cat "$PIDFILE")）" >&2; exit 0; }
@@ -1321,17 +1371,17 @@ cmd_ssh_gate() {
 }
 
 cmd_give() {
-    canon_target "$@" || die "用法：$0 give peer | self | <设备名或编码>"
+    canon_target "$@" || die "$(t mac.usage.give)"
     need_config
     if daemon_alive; then
-        write_cmd "give $CANON"
-        echo "已交给守护进程：give $CANON"
+        send_cmd "give $CANON"
+        say_done
         return 0
     fi
     # 守护进程未运行：本进程直接执行，不写状态文件（对端 request 仍应得到 3）
     MODE=direct
     if busy_by_other; then
-        notify "正在切换中，已忽略新的请求"
+        notify "$(t mac.notify.busy)"
         return 0
     fi
     busy_begin
@@ -1343,16 +1393,17 @@ cmd_give() {
 cmd_take_release() {
     need_config
     if daemon_alive; then
-        write_cmd "$1"
-        echo "已交给守护进程：$1（之后守护进程仍按 DDC 读数跟随）"
+        send_cmd "$1"
+        say_done
         return 0
     fi
     MODE=direct
     if [ "$1" = take ]; then do_take; else do_release; fi || die "$LAYOUT_ERR"
-    echo "完成：$(layout_mode)"
+    say_done
 }
 
-cmd_status() {
+# 诊断：归属、守护进程、当前布局（给人看的文字，不是 JSON）
+cmd_diag() {
     need_config
     local kv ts pid
     if daemon_alive; then
@@ -1387,6 +1438,8 @@ write_config() {
         echo "MAIN_NAME=$(sq "$MAIN_NAME")"
         echo "MAIN_UUID=$(sq "$MAIN_UUID")"
         echo "MAIN_ID=$(sq "$MAIN_ID")"
+        echo "# 主屏的输入口清单（显示器 capabilities 里 VCP 0x60 的取值），detect 读出"
+        echo "MAIN_PORTS=$(sq "$MAIN_PORTS")"
         echo
         echo "# 本机：名字（留空取电脑名）和所接输入口的编码（VCP 0x60，十进制）"
         echo "SELF_NAME=$(sq "$SELF_NAME")"
@@ -1461,12 +1514,12 @@ write_config() {
 # 镜像、缺屏时返回 1，原因在 CUR_ERR
 read_current_layout() {
     local last a v res hz depth scaling
-    CUR_ERR=""
+    CUR_ERR=""; CUR_ERR_KIND=""
     last=$("$DISPLAYPLACER" list 2>/dev/null | tail -1)
     case "$last" in
-        *"+$MAIN_ID"*|*"$MAIN_ID+"*) CUR_ERR="当前是镜像"; return 1 ;;
+        *"+$MAIN_ID"*|*"$MAIN_ID+"*) CUR_ERR=$(t mac.err.mirrored); CUR_ERR_KIND=mirror; return 1 ;;
         *"$MAIN_ID"*) ;;
-        *) CUR_ERR="当前拓扑里没有主屏"; return 1 ;;
+        *) CUR_ERR=$(t mac.err.mainAbsent); return 1 ;;
     esac
     CUR_EXT=()
     while IFS= read -r a; do
@@ -1476,7 +1529,7 @@ read_current_layout() {
     for v in "${CUR_EXT[@]}"; do
         case "$v" in "id:$SECOND_ID "*) a=$v ;; esac
     done
-    [ -n "$a" ] || { CUR_ERR="当前排列里没有另一块屏"; return 1; }
+    [ -n "$a" ] || { CUR_ERR=$(t mac.err.noSecond); return 1; }
     res=$(printf '%s\n' "$a" | grep -o 'res:[0-9]*x[0-9]*')
     hz=$(printf '%s\n' "$a" | grep -o 'hz:[0-9]*')
     depth=$(printf '%s\n' "$a" | grep -o 'color_depth:[0-9]*')
@@ -1494,7 +1547,7 @@ do_save_layout() {
     load_config
     if ! read_current_layout; then
         log "layout: 未保存排列（$1）：$CUR_ERR"
-        [ "$1" = manual ] && notify "无法保存排列：$CUR_ERR"
+        [ "$1" = manual ] && notify "$(t mac.notify.saveFailed "$CUR_ERR")"
         return 1
     fi
     EXTEND_ARGS=("${CUR_EXT[@]}")
@@ -1502,7 +1555,7 @@ do_save_layout() {
     write_config
     PENDING_SIG=""
     log "layout: 已保存排列（$1）$(layout_sig "${EXTEND_ARGS[@]}")"
-    if [ "$1" = auto ]; then notify "已自动记住新的屏幕排列"; else notify "已保存当前屏幕排列"; fi
+    if [ "$1" = auto ]; then notify "$(t mac.notify.autoSaved)"; else notify "$(t mac.notify.saved)"; fi
 }
 
 # 菜单开关：只允许改白名单里的项
@@ -1513,7 +1566,7 @@ do_set() {
     esac
     if [ "$1=$2" = OWNED_LAYOUT=external ] && [ "$SECOND_BUILTIN" != 1 ]; then
         log "set: 另一块屏是外接屏，不支持仅大屏"
-        notify "另一块屏是外接屏，不支持"仅大屏""
+        notify "$(t mac.err.mainOnlyUnsupported)"
         return 1
     fi
     load_config
@@ -1548,56 +1601,172 @@ auto_save_check() {
     fi
 }
 
-# 探测主屏、本机编码和屏幕组合，写入 config.sh。不提问；对方电脑、设备等已有的设置原样保留
-cmd_init() {
-    local name=${1:-$MAIN_NAME} line uuid list builtin main others n v i names
-    local -a vals
+# ---------------------------------------------------------------- 检测（detect）
+
+# 检测前的检查：Apple 芯片、工具齐全、笔记本开着盖子
+detect_preflight() {
     mkdir -p "$SCREENCTL_DIR"
     # m1ddc 只支持 Apple 芯片（用 sysctl 判断，Rosetta 下的终端也不会误判）
-    [ "$(sysctl -n hw.optional.arm64 2>/dev/null)" = 1 ] || die "只支持 Apple 芯片的 Mac（m1ddc 不支持 Intel Mac）"
-    command -v "$M1DDC" >/dev/null && command -v "$DISPLAYPLACER" >/dev/null \
-        || die "请先运行：brew install m1ddc displayplacer"
+    local arm
+    arm=$(sysctl -n hw.optional.arm64 2>/dev/null)
+    [ -n "$arm" ] || { [ "$(uname -m)" = arm64 ] && arm=1; }   # 读不了 sysctl（沙箱等）时看 uname
+    [ "$arm" = 1 ] || die "$(t mac.err.intel)"
+    command -v "$M1DDC" >/dev/null && command -v "$DISPLAYPLACER" >/dev/null || die "$(t mac.err.noTools)"
     # 合着盖子时自带屏不在显示器列表里，会被记成"没有另一块屏"。开着盖子设置一次，之后合盖使用由守护进程自动处理
-    lid_closed && die "笔记本合着盖子。请打开盖子再运行设置；设置好以后合盖使用不受影响"
+    lid_closed && die "$(t mac.err.lidClosed)"
+    return 0
+}
 
-    # 没指定名字时：m1ddc 列出的外接显示器（笔记本内建屏显示为 (null)）只有一块就用它
-    if [ -z "$name" ]; then
-        names=$("$M1DDC" display list 2>/dev/null | sed -n 's/^\[[0-9]*\] \(.*\) ([0-9A-Fa-f-]\{36\})$/\1/p' | grep -vx '(null)')
-        case "$(printf '%s\n' "$names" | grep -c .)" in
-            1) name=$names; echo "主屏（共享显示器）：$name" ;;
-            0) die "m1ddc 没有找到外接显示器。请确认共享显示器接在 Mac 上、正在显示 Mac、显示器菜单里已打开 DDC/CI，且线路（扩展坞、转接头）支持 DDC" ;;
-            *) die "找到多块外接显示器，请指定哪块是共享的：$0 setup <名字>（可选：$(printf '%s\n' "$names" | paste -sd '/' -)）" ;;
+# m1ddc 看得到的外接显示器（笔记本自带屏显示为 (null)，不算）：每块一行"名字<Tab>uuid"
+m1ddc_externals() {
+    "$M1DDC" display list 2>/dev/null \
+        | sed -n 's/^\[[0-9]*\] \(.*\) (\([0-9A-Fa-f-]\{36\}\))$/\1	\2/p' | grep -v '^(null)	'
+}
+
+# 一块显示器此刻的输入源编码（1–255），读两次；读不出（不应答 DDC、主屏没在显示本机等）时不输出、返回 1
+ddc_input_of() {
+    local v i
+    for i in 1 2; do
+        v=$(lockf -k -t 3 "$DDC_LOCK" "$M1DDC" display "$1" get input 2>/dev/null | head -1)
+        is_int "$v" && [ "$v" -ge 1 ] && [ "$v" -le 255 ] && { printf '%s' "$v"; return 0; }
+        [ $i -lt 2 ] && sleep 0.2
+    done
+    return 1
+}
+
+# 显示器的名字（系统里的产品名）：display-helper list 每行末尾的 name=；没有时用 $2
+display_name_of() {
+    local n
+    n=$("$DISPLAY_HELPER" list 2>/dev/null | awk -v u="uuid=$1" 'toupper($0) ~ toupper(u) { i = index($0, " name="); if (i) print substr($0, i + 6); exit }')
+    [ -n "$n" ] && [ "$n" != - ] || n=$2
+    printf '%s' "$n"
+}
+
+# 从 capabilities 字符串里取 VCP 0x60（输入源）支持的取值，转成十进制、空格分隔。读不出时不输出
+parse_input_caps() {
+    printf '%s' "$1" | awk '
+        {
+            s = $0; i = index(s, "vcp(")
+            if (!i) exit
+            s = substr(s, i + 4); depth = 0; tok = ""; out = ""
+            for (k = 1; k <= length(s); k++) {
+                ch = substr(s, k, 1)
+                if (ch == "(") {
+                    # "60(" 或 "60 (" 都算
+                    if (depth == 0 && toupper(tok == "" ? last : tok) == "60") { grab = 1; vals = "" }
+                    depth++; tok = ""; last = ""
+                } else if (ch == ")") {
+                    depth--
+                    if (depth < 0) break
+                    if (depth == 0 && grab) { out = vals; grab = 0; break }
+                    tok = ""
+                } else if (ch == " ") {
+                    if (depth == 0 && tok != "") { last = tok; tok = "" }
+                } else if (depth == 0) {
+                    tok = tok ch; last = ""
+                } else if (grab) {
+                    vals = vals ch
+                }
+            }
+            # 取值都是两位十六进制，有的显示器不写空格
+            res = ""
+            for (k = 1; k + 1 <= length(out); k += 2) {
+                h = toupper(substr(out, k, 2)); v = 0
+                for (j = 1; j <= 2; j++) {
+                    c = index("0123456789ABCDEF", substr(h, j, 1))
+                    if (!c) { v = -1; break }
+                    v = v * 16 + c - 1
+                }
+                if (v > 0) res = res (res == "" ? "" : " ") v
+            }
+            print res
+        }'
+}
+
+# 读一块显示器的输入口清单（capabilities 里的 VCP 0x60），十进制、空格分隔；读不出时返回 1。
+# 读一次约 2–3 秒，期间占着 DDC 锁；显示器须正在显示本机
+read_input_caps() {
+    local caps ports
+    [ -x "$DISPLAY_HELPER" ] || return 1
+    caps=$(lockf -k -t 10 "$DDC_LOCK" "$DISPLAY_HELPER" caps "$1" 2>/dev/null) || return 1
+    ports=$(parse_input_caps "$caps")
+    [ -n "$ports" ] || return 1
+    printf '%s' "$ports"
+}
+
+# 检测主屏、本机编码、屏幕组合和输入口清单并写入 config.sh（docs/settings-ui-design.md 第 7 节）。
+# 不指定 --main 时：只有一块显示器能用软件控制就用它；几块都能控制时退出码 1，列出候选，要带 --main 重跑。
+# 对方电脑、设备、快捷键等已有的设置原样保留。旧写法 init [显示器名] 同样走这里
+cmd_detect() {
+    local want="" name uuid line n=0 cands=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --main) [ $# -ge 2 ] || die "$(t mac.usage.detect)"; want=$2; shift 2 ;;
+            -*) die "$(t mac.usage.detect)" ;;
+            *) want=$1; shift ;;
         esac
+    done
+    detect_preflight
+    if [ -n "$want" ]; then
+        line=$(m1ddc_externals | awk -F'\t' -v w="$want" '$1 == w || toupper($2) == toupper(w) { print; exit }')
+        [ -n "$line" ] || die "$(t mac.err.monitorNotFound "$want")"
+        name=${line%%	*}; uuid=${line#*	}
+    else
+        while IFS='	' read -r name uuid; do
+            [ -n "$uuid" ] || continue
+            ddc_input_of "$uuid" >/dev/null || continue
+            n=$((n + 1))
+            cands="$cands$name	$uuid
+"
+        done < <(m1ddc_externals)
+        [ $n -gt 0 ] || die "$(t mac.err.noMonitor)"
+        if [ $n -gt 1 ]; then
+            {
+                echo "error: $(t mac.err.manyMonitors)"
+                printf '%s' "$cands" | while IFS='	' read -r name uuid; do
+                    [ -n "$uuid" ] && echo "  $name  $(display_name_of "$uuid" "$name")"
+                done
+            } >&2
+            exit 1
+        fi
+        name=${cands%%	*}; uuid=${cands#*	}; uuid=${uuid%%
+*}
     fi
+    detect_main "$name" "$uuid"
+    rm -f "$SCREENCTL_DIR/.direct_ok" "$SCREENCTL_DIR/.direct_fail"
+    reload_daemon
+    say_done
+}
 
-    line=$("$M1DDC" display list 2>/dev/null | grep -F " $name (" | head -1)
-    uuid=$(printf '%s\n' "$line" | sed -n 's/.*(\([0-9A-Fa-f-]\{36\}\)).*/\1/p')
-    [ -n "$uuid" ] || die "m1ddc display list 中找不到 $name。请用 m1ddc display list 查看显示器的名字，并确认共享显示器正在显示 Mac"
-
+# 主屏已选定（$1 = m1ddc 里的名字，$2 = uuid）：读屏幕组合、扩展排列、本机编码、最大亮度、输入口清单，写入 config.sh
+detect_main() {
+    local name=$1 uuid=$2 list builtin main others n v i ports
+    local -a vals
     list=$("$DISPLAYPLACER" list 2>/dev/null)
     builtin=$(printf '%s\n' "$list" | awk '/^Persistent screen id:/{id=$4} /^Type: MacBook built in screen/{print id; exit}')
     if printf '%s\n' "$list" | grep -q "^Persistent screen id: $uuid\$"; then
         main=$uuid
     else
         main=$(printf '%s\n' "$list" | awk -v l="$builtin" '/^Persistent screen id:/{if ($4 != l) print $4}')
-        [ "$(printf '%s\n' "$main" | grep -c .)" -eq 1 ] \
-            || die "无法确定主屏的 displayplacer id，请手工填写 config.sh 的 MAIN_ID"
+        [ "$(printf '%s\n' "$main" | grep -c .)" -eq 1 ] || die "$(t mac.err.noMainId)"
     fi
 
     # 屏幕组合（设计文档 7）：除主屏外，另一块屏是笔记本自带屏、一块外接屏，或者没有
     others=$(printf '%s\n' "$list" | awk -v m="$main" -v b="$builtin" '/^Persistent screen id:/{if ($4 != m && $4 != b) print $4}')
     n=$(printf '%s\n' "$others" | grep -c .)
     if [ -n "$builtin" ]; then
-        [ "$n" -eq 0 ] || die "这台 Mac 除了主屏和自带屏还接着别的显示器。一台电脑上三块及以上的屏暂不支持"
+        [ "$n" -eq 0 ] || die "$(t mac.err.tooManyScreens)"
         LAYOUT=second; SECOND_ID=$builtin; SECOND_BUILTIN=1
     elif [ "$n" -eq 0 ]; then
         LAYOUT=none; SECOND_ID=""; SECOND_BUILTIN=0
     elif [ "$n" -eq 1 ]; then
         LAYOUT=second; SECOND_ID=$others; SECOND_BUILTIN=0
     else
-        die "这台 Mac 接了三块及以上的显示器，暂不支持"
+        die "$(t mac.err.tooManyScreens)"
     fi
 
+    # 换了一块显示器时，上一块的输入口清单作废
+    [ "$uuid" = "$MAIN_UUID" ] || MAIN_PORTS=""
     MAIN_NAME=$name
     MAIN_UUID=$uuid
     MAIN_ID=$main
@@ -1606,14 +1775,14 @@ cmd_init() {
     elif read_current_layout; then
         EXTEND_ARGS=("${CUR_EXT[@]}")
         MIRROR_ARGS=("${CUR_MIR[@]}")
-    elif [ "$CUR_ERR" = "当前是镜像" ] && [ ${#EXTEND_ARGS[@]} -gt 0 ] && [ ${#MIRROR_ARGS[@]} -gt 0 ]; then
-        echo "注意：当前是镜像，沿用 config.sh 里已有的扩展排列"
+    elif [ "$CUR_ERR_KIND" = mirror ] && [ ${#EXTEND_ARGS[@]} -gt 0 ] && [ ${#MIRROR_ARGS[@]} -gt 0 ]; then
+        log "detect: 当前是镜像，沿用已有的扩展排列"
     else
-        die "$CUR_ERR。请让主屏显示 Mac、切到扩展后再运行设置"
+        die "$(t mac.err.needExtend "$CUR_ERR")"
     fi
     [ "$SECOND_BUILTIN" = 1 ] || OWNED_LAYOUT=extend
 
-    # 主屏正显示 Mac 时读到的值就是 Mac 所接输入口的编码
+    # 主屏正显示本机时读到的值就是本机所接输入口的编码
     vals=()
     for i in 1 2 3; do
         v=$(lockf -k -t 3 "$DDC_LOCK" "$M1DDC" display "$uuid" get input 2>/dev/null)
@@ -1621,14 +1790,12 @@ cmd_init() {
         sleep 0.3
     done
     v=""
-    if [ ${#vals[@]} -ge 2 ]; then
-        v=$(printf '%s\n' "${vals[@]}" | sort | uniq -c | sort -rn | awk '$1 >= 2 {print $2; exit}')
-    fi
+    [ ${#vals[@]} -ge 2 ] && v=$(printf '%s\n' "${vals[@]}" | sort | uniq -c | sort -rn | awk '$1 >= 2 {print $2; exit}')
     if [ -n "$v" ]; then
-        [ "$v" != "$((CODE_SELF))" ] && echo "本机编码由 $CODE_SELF 更新为 $v"
+        [ "$v" != "$((CODE_SELF))" ] && log "detect: 本机编码由 $CODE_SELF 更新为 $v"
         CODE_SELF=$v
     else
-        echo "警告：未读到稳定的输入源编码（主屏可能不在本机），沿用 CODE_SELF=$CODE_SELF"
+        log "detect: 未读到稳定的输入源编码（主屏可能不在本机），沿用 CODE_SELF=$CODE_SELF"
     fi
 
     # 学习最大亮度，供 ddc_sanity 核对；读不出稳定正值就关闭核对
@@ -1643,9 +1810,9 @@ cmd_init() {
     if [ -n "$v" ]; then
         SANITY_MAXLUM=$v
     elif [ "${SANITY_MAXLUM:-0}" -gt 0 ]; then
-        echo "警告：未读到稳定的最大亮度（主屏可能不在本机），沿用 SANITY_MAXLUM=$SANITY_MAXLUM"
+        log "detect: 未读到稳定的最大亮度，沿用 SANITY_MAXLUM=$SANITY_MAXLUM"
     else
-        echo "警告：未读到稳定的最大亮度，关闭占有核对（SANITY_MAXLUM=0）"
+        log "detect: 未读到稳定的最大亮度，关闭占有核对（SANITY_MAXLUM=0）"
     fi
 
     if [ "$SECOND_BUILTIN" = 1 ] && [ -x "$DISPLAY_HELPER" ]; then
@@ -1653,21 +1820,507 @@ cmd_init() {
         is_int "$v" && LAPTOP_CGID=$v
     fi
 
+    # 输入口清单；读不出时沿用上次读到的（同一块显示器）
+    if ports=$(read_input_caps "$uuid"); then
+        MAIN_PORTS=$ports
+    else
+        log "detect: 读不出输入口清单，沿用 MAIN_PORTS='$MAIN_PORTS'"
+    fi
+
     [ -f "$CONFIG" ] && cp -f "$CONFIG" "$CONFIG.bak"
     write_config
-    rm -f "$SCREENCTL_DIR/.direct_ok" "$SCREENCTL_DIR/.direct_fail"
+    log "detect: 主屏 $MAIN_NAME uuid=$MAIN_UUID CODE_SELF=$CODE_SELF SANITY_MAXLUM=$SANITY_MAXLUM LAYOUT=$LAYOUT SECOND_BUILTIN=$SECOND_BUILTIN MAIN_PORTS='$MAIN_PORTS'"
+}
 
-    echo "已写入 $CONFIG"
-    echo "  主屏 $MAIN_NAME  uuid=$MAIN_UUID"
-    echo "  本机编码 CODE_SELF=$CODE_SELF  最大亮度核对 SANITY_MAXLUM=$SANITY_MAXLUM"
-    if [ "$LAYOUT" = none ]; then
-        echo "  屏幕组合：只有主屏，不调整布局"
-    else
-        if [ "$SECOND_BUILTIN" = 1 ]; then echo "  屏幕组合：主屏 + 笔记本自带屏（id=$SECOND_ID）"
-        else echo "  屏幕组合：主屏 + 另一块外接屏（id=$SECOND_ID）"; fi
-        echo "  扩展：displayplacer$(printf ' "%s"' "${EXTEND_ARGS[@]}")"
-        echo "  镜像：displayplacer \"${MIRROR_ARGS[0]}\""
+# ---------------------------------------------------------------- JSON
+
+json_str() {
+    local s=$1
+    s=${s//\\/\\\\}
+    s=${s//\"/\\\"}
+    s=${s//	/\\t}
+    s=${s//
+/\\n}
+    printf '"%s"' "$s"
+}
+
+# 数字字段用数字，没有时 null
+json_num() {
+    if is_int "$1" && [ -n "$1" ]; then printf '%s' "$((10#${1#-}))"; else printf null; fi
+}
+
+json_bool() {
+    if [ "$1" = 1 ]; then printf true; else printf false; fi
+}
+
+# ---------------------------------------------------------------- 给 Agent 和图形界面用的命令（docs/settings-ui-design.md 第 7 节）
+
+LAUNCH_AGENTS_DIR="${LAUNCH_AGENTS_DIR:-$HOME/Library/LaunchAgents}"
+AGENT_LABELS="com.user.screenctl com.user.screenswitch-menu"
+
+# 开机自动运行 = 两个 LaunchAgent 都在 ~/Library/LaunchAgents 里
+autostart_on() {
+    local l
+    for l in $AGENT_LABELS; do [ -f "$LAUNCH_AGENTS_DIR/$l.plist" ] || return 1; done
+    return 0
+}
+
+menu_alive() {
+    local pid
+    pid=$(cat "$SCREENCTL_DIR/menu.pid" 2>/dev/null)
+    is_int "$pid" && kill -0 "$pid" 2>/dev/null
+}
+
+# 需要用户处理的问题（英文标识，status 的 problems）：not-configured、daemon-not-running、menu-not-running，
+# 以及菜单栏程序写在 menu.problems 里的 hotkey-failed:<peer|编码>、notifications-off
+list_problems() {
+    if ! configured; then
+        echo not-configured
+        return 0
     fi
+    daemon_alive || echo daemon-not-running
+    if menu_alive; then
+        [ -f "$SCREENCTL_DIR/menu.problems" ] && grep -v '^$' "$SCREENCTL_DIR/menu.problems"
+    else
+        echo menu-not-running
+    fi
+    return 0
+}
+
+cmd_status() {
+    local own=null kv ts running=0 i=0 e out probs="" p
+    if daemon_alive; then
+        running=1
+        read -r kv ts 2>/dev/null < "$STATE"
+        case "$kv" in owned=1) own=true ;; owned=0) own=false ;; esac
+    fi
+    out="{\"configured\":$(if configured; then echo true; else echo false; fi)"
+    out="$out,\"mainScreen\":$(json_str "$(configured && printf '%s' "$MAIN_NAME")")"
+    if configured; then
+        out="$out,\"self\":{\"name\":$(json_str "$(self_name)"),\"code\":$(json_num "$CODE_SELF")}"
+    else
+        out="$out,\"self\":{\"name\":$(json_str "$(self_name)"),\"code\":null}"
+    fi
+    out="$out,\"layout\":$(json_str "$LAYOUT")"
+    if [ "$(want_layout)" = external ]; then out="$out,\"ownedLayout\":\"main-only\""; else out="$out,\"ownedLayout\":\"extend\""; fi
+    out="$out,\"autoSave\":$(json_bool "$AUTO_SAVE_LAYOUT"),\"directTake\":$(json_bool "$DIRECT_TAKE")"
+    if peer_configured; then
+        out="$out,\"peer\":{\"configured\":true,\"name\":$(json_str "$PEER_NAME"),\"os\":$(json_str "$PEER_OS")"
+    else
+        out="$out,\"peer\":{\"configured\":false,\"name\":$(json_str "$( [ -n "$PEER_HOST" ] && printf '%s' "$PEER_NAME")"),\"os\":$(json_str "$( [ -n "$PEER_HOST" ] && printf '%s' "$PEER_OS")")"
+    fi
+    out="$out,\"host\":$(json_str "$PEER_HOST"),\"user\":$(json_str "$PEER_USER"),\"code\":$(json_num "$CODE_PEER")}"
+    out="$out,\"devices\":["
+    for e in "${DEVICES[@]}"; do
+        [ $i -gt 0 ] && out="$out,"
+        out="$out{\"name\":$(json_str "${e%=*}"),\"code\":$(json_num "${e##*=}"),\"hotkey\":$(json_str "${HOTKEY_DEVICES[$i]}")}"
+        i=$((i + 1))
+    done
+    out="$out],\"trayRunning\":$(json_bool $running),\"owned\":$own"
+    out="$out,\"autostart\":$(if autostart_on; then echo true; else echo false; fi)"
+    while IFS= read -r p; do
+        [ -n "$p" ] || continue
+        probs="$probs${probs:+,}$(json_str "$p")"
+    done < <(list_problems)
+    echo "$out,\"problems\":[$probs]}"
+}
+
+# 输入口的标准名称（只有这四个有标准名，其余只显示编码）
+port_name() {
+    case "$1" in
+        15) echo "DisplayPort 1" ;;
+        16) echo "DisplayPort 2" ;;
+        17) echo "HDMI 1" ;;
+        18) echo "HDMI 2" ;;
+        *) echo "" ;;
+    esac
+}
+
+# ports：主屏的输入口清单，及每个口登记的是什么。清单 = 显示器报出来的口（MAIN_PORTS）加上已登记的口。
+# --main <名字或 uuid>（向导用，还没写配置）：现在去读这块显示器的清单，本机编码取它此刻的输入源
+cmd_ports() {
+    local known codes c use dev from first=1 out uuid self=$CODE_SELF peer=$CODE_PEER line monitor_ports
+    local -a devs
+    if [ "$1" = --main ]; then
+        [ $# -ge 2 ] || die "$(t mac.usage.ports)"
+        line=$(m1ddc_externals | awk -F'\t' -v w="$2" '$1 == w || toupper($2) == toupper(w) { print; exit }')
+        [ -n "$line" ] || die "$(t mac.err.monitorNotFound "$2")"
+        uuid=${line#*	}
+        monitor_ports=$(read_input_caps "$uuid")
+        self=$(ddc_input_of "$uuid")
+        peer=""
+        devs=()
+    else
+        monitor_ports=$MAIN_PORTS
+        configured || self=""
+        devs=("${DEVICES[@]}")
+    fi
+    if [ -n "$monitor_ports" ]; then known=true; else known=false; fi
+    codes=$(
+        for c in $monitor_ports $self $peer; do echo "$c"; done
+        for e in "${devs[@]}"; do echo "${e##*=}"; done
+    )
+    out="{\"monitorKnown\":$known,\"ports\":["
+    for c in $(printf '%s\n' "$codes" | grep -E '^[0-9]+$' | sort -n | uniq); do
+        dev=""
+        if [ "$c" = "$self" ]; then use=self
+        elif [ "$c" = "$peer" ]; then use=peer
+        else
+            use=none
+            for e in "${devs[@]}"; do
+                [ "${e##*=}" = "$c" ] && { use=device; dev=${e%=*}; break; }
+            done
+        fi
+        from=false
+        case " $monitor_ports " in *" $c "*) from=true ;; esac
+        [ $first -eq 1 ] || out="$out,"
+        first=0
+        out="$out{\"code\":$c,\"name\":$(json_str "$(port_name "$c")"),\"use\":\"$use\",\"device\":$(json_str "$dev"),\"fromMonitor\":$from}"
+    done
+    echo "$out]}"
+}
+
+# displays（向导用）：所有在线显示器，每块能否用软件控制、此刻的输入源编码；笔记本是否合着盖子
+cmd_displays() {
+    local out first=1 name uuid code ctl builtin listed="" l id
+    out="{\"lidClosed\":$(if lid_closed; then echo true; else echo false; fi),\"displays\":["
+    while IFS='	' read -r name uuid; do
+        [ -n "$uuid" ] || continue
+        listed="$listed $uuid"
+        if code=$(ddc_input_of "$uuid"); then ctl=true; else ctl=false; code=""; fi
+        [ $first -eq 1 ] || out="$out,"
+        first=0
+        out="$out{\"name\":$(json_str "$name"),\"title\":$(json_str "$(display_name_of "$uuid" "$name")"),\"uuid\":$(json_str "$uuid"),\"builtin\":false,\"controllable\":$ctl,\"code\":$(json_num "$code")}"
+    done < <(m1ddc_externals)
+    # m1ddc 不列出的屏（笔记本自带屏、不走 DDC 的外接屏）：从 displayplacer 里补上
+    while IFS= read -r l; do
+        id=${l%% *}; builtin=${l#* }
+        case " $listed " in *" $id "*) continue ;; esac
+        [ $first -eq 1 ] || out="$out,"
+        first=0
+        if [ "$builtin" = 1 ]; then name=$(t mac.screen.builtin); else name=$(display_name_of "$id" "-"); fi
+        out="$out{\"name\":$(json_str "$name"),\"title\":$(json_str "$name"),\"uuid\":$(json_str "$id"),\"builtin\":$(json_bool "$builtin"),\"controllable\":false,\"code\":null}"
+    done < <("$DISPLAYPLACER" list 2>/dev/null | awk '/^Persistent screen id:/{id=$4} /^Type:/{print id, (/MacBook built in screen/ ? 1 : 0)}')
+    echo "$out]}"
+}
+
+# 改了配置后让守护进程重新读取；$1 可换成别的命令（如 set OWNED_LAYOUT …，守护进程会立即按新偏好生效）
+reload_daemon() {
+    daemon_alive || return 0
+    send_cmd "${1:-reload}"
+}
+
+# 写命令文件：前一条还没被守护进程取走时等它最多 3 秒（命令文件一次只放一条），同样的命令不重复写
+send_cmd() {
+    local i c
+    for i in 1 2 3 4 5 6; do
+        [ -f "$CMD" ] || break
+        c=$(head -1 "$CMD" 2>/dev/null)
+        [ "$c" = "$1" ] && return 0
+        sleep 0.5
+    done
+    write_cmd "$1"
+}
+
+# 名字：去掉单引号、制表符、换行；不能为空
+need_name() {
+    NAME=$(clean_value "$*")
+    NAME=$(printf '%s' "$NAME" | sed 's/^ *//; s/ *$//')
+    [ -n "$NAME" ] || die "$(t mac.err.emptyName)"
+}
+
+# 编码：1–255 的十进制数
+need_code() {
+    is_int "$1" && [ "${1#-}" = "$1" ] && [ "$((10#$1))" -ge 1 ] && [ "$((10#$1))" -le 255 ] || die "$(t mac.err.badCode "$1")"
+    CODE=$((10#$1))
+}
+
+# 对方电脑在 $1（系统）、$2（用户名）下的程序路径默认值
+default_peer_prog() {
+    if [ "$1" = mac ]; then printf '%s' '~/screenctl/screenctl.sh'
+    else printf '%s' "C:\\Users\\$2\\ScreenSwitch\\ScreenSwitch.exe"; fi
+}
+
+# peer set --os <windows|mac> --host <地址> --user <用户名> [--name <名字>] | peer clear | peer test | peer code <编码>|none
+cmd_peer() {
+    local sub=$1 os="" host="" user="" name="" old_default n
+    shift
+    case "$sub" in
+        set)
+            while [ $# -gt 0 ]; do
+                [ $# -ge 2 ] || die "$(t mac.usage.peer)"
+                case "$1" in
+                    --os) os=$2 ;;
+                    --host) host=$(clean_value "$2") ;;
+                    --user) user=$(clean_value "$2") ;;
+                    --name) name=$(clean_value "$2") ;;
+                    *) die "$(t mac.usage.peer)" ;;
+                esac
+                shift 2
+            done
+            case "$os" in windows|mac) ;; *) die "$(t mac.usage.peer)" ;; esac
+            [ -n "$host" ] && [ -n "$user" ] || die "$(t mac.usage.peer)"
+            [ -z "$host" ] || [ "${host#-}" = "$host" ] || die "$(t mac.usage.peer)"
+            load_config
+            old_default=$(default_peer_prog "$PEER_OS" "$PEER_USER")
+            # 没改过程序路径（或系统、用户名变了）时按新的系统和用户名重新生成
+            if [ -z "$PEER_PROG" ] || [ "$PEER_PROG" = "$old_default" ] || [ "$os" != "$PEER_OS" ] || [ "$user" != "$PEER_USER" ]; then
+                PEER_PROG=$(default_peer_prog "$os" "$user")
+            fi
+            if [ -n "$name" ]; then
+                PEER_NAME=$name
+            elif [ -z "$PEER_HOST" ] || [ "$PEER_NAME" = Windows ] || [ "$PEER_NAME" = Mac ]; then
+                if [ "$os" = mac ]; then PEER_NAME=Mac; else PEER_NAME=Windows; fi
+            fi
+            PEER_OS=$os; PEER_HOST=$host; PEER_USER=$user
+            write_config
+            log "peer: set $PEER_NAME ($PEER_OS) $PEER_USER@$PEER_HOST"
+            reload_daemon
+            say_done ;;
+        clear)
+            [ $# -eq 0 ] || die "$(t mac.usage.peer)"
+            load_config
+            PEER_NAME=""; PEER_OS=""; PEER_HOST=""; PEER_USER=""; PEER_PROG=""; CODE_PEER=""
+            write_config
+            load_config
+            log "peer: 已清除"
+            reload_daemon
+            say_done ;;
+        test)
+            # 向导里还没写配置时可以带 --os --host --user 临时试连，不写配置
+            if [ $# -gt 0 ]; then
+                while [ $# -gt 0 ]; do
+                    [ $# -ge 2 ] || die "$(t mac.usage.peer)"
+                    case "$1" in
+                        --os) os=$2 ;;
+                        --host) host=$(clean_value "$2") ;;
+                        --user) user=$(clean_value "$2") ;;
+                        --name) name=$(clean_value "$2") ;;
+                        *) die "$(t mac.usage.peer)" ;;
+                    esac
+                    shift 2
+                done
+                case "$os" in windows|mac) ;; *) die "$(t mac.usage.peer)" ;; esac
+                [ -n "$host" ] && [ -n "$user" ] && [ "${host#-}" = "$host" ] || die "$(t mac.usage.peer)"
+                PEER_OS=$os; PEER_HOST=$host; PEER_USER=$user; PEER_PROG=$(default_peer_prog "$os" "$user")
+                PEER_NAME=${name:-$host}
+                TEST_ONLY=1
+            fi
+            peer_configured || die "$(t mac.err.noPeer)"
+            if ! peer_info; then
+                n=$(grep -v '^proto=' "$SCREENCTL_DIR/.relay.out" 2>/dev/null | tr -d '\r' | grep . | tail -1 | cut -c1-200)
+                die "$(t mac.err.peerTestFailed "$PEER_NAME" "${n:-?}")"
+            fi
+            n=false
+            if [ -n "$INFO_CODE" ] && [ -z "${TEST_ONLY:-}" ]; then
+                [ "$INFO_CODE" = "$CODE_PEER" ] || save_peer_code "$INFO_CODE"
+                n=true
+                reload_daemon
+            fi
+            echo "{\"name\":$(json_str "$INFO_NAME"),\"code\":$(json_num "$INFO_CODE"),\"codeSaved\":$n}" ;;
+        code)
+            [ $# -eq 1 ] || die "$(t mac.usage.peer)"
+            load_config
+            if [ "$1" = none ]; then
+                CODE_PEER=""
+            else
+                need_code "$1"
+                [ "$CODE" != "$CODE_SELF" ] || die "$(t mac.err.codeIsSelf "$CODE")"
+                n=$(device_name_by_code "$CODE") && die "$(t mac.err.codeTaken "$CODE" "$n")"
+                CODE_PEER=$CODE
+            fi
+            write_config
+            reload_daemon
+            say_done ;;
+        *) die "$(t mac.usage.peer)" ;;
+    esac
+}
+
+# 本机公钥，没有就先生成
+cmd_pubkey() {
+    if [ ! -f "$SSH_KEY.pub" ]; then
+        mkdir -p "$(dirname "$SSH_KEY")" && chmod 700 "$(dirname "$SSH_KEY")"
+        ssh-keygen -q -t ed25519 -N "" -C "screenctl@$(scutil --get LocalHostName 2>/dev/null)" -f "$SSH_KEY" </dev/null >/dev/null 2>&1 \
+            || die "$(t mac.err.keygenFailed)"
+    fi
+    cat "$SSH_KEY.pub"
+}
+
+# device add <编码> <名字> | rename <编码> <名字> | remove <编码>；名字取其余所有参数，用空格连接
+cmd_device() {
+    local sub=$1 e i n
+    local -a keep keep_hk
+    shift
+    case "$sub" in
+        add|rename) [ $# -ge 2 ] || die "$(t mac.usage.device)" ;;
+        remove) [ $# -eq 1 ] || die "$(t mac.usage.device)" ;;
+        *) die "$(t mac.usage.device)" ;;
+    esac
+    need_code "$1"
+    shift
+    load_config
+    case "$sub" in
+        add)
+            need_name "$@"
+            [ "$CODE" != "$CODE_SELF" ] || die "$(t mac.err.codeIsSelf "$CODE")"
+            [ "$CODE" != "$CODE_PEER" ] || die "$(t mac.err.codeIsPeer "$CODE" "$PEER_NAME")"
+            n=$(device_name_by_code "$CODE") && die "$(t mac.err.codeTaken "$CODE" "$n")"
+            device_code_of "$NAME" >/dev/null && die "$(t mac.err.nameTaken "$NAME")"
+            DEVICES+=("$NAME=$CODE"); HOTKEY_DEVICES[$(( ${#DEVICES[@]} - 1 ))]="" ;;
+        rename)
+            need_name "$@"
+            device_name_by_code "$CODE" >/dev/null || die "$(t mac.err.noDevice "$CODE")"
+            n=$(device_code_of "$NAME") && [ "$n" != "$CODE" ] && die "$(t mac.err.nameTaken "$NAME")"
+            for i in "${!DEVICES[@]}"; do
+                [ "${DEVICES[$i]##*=}" = "$CODE" ] && DEVICES[$i]="$NAME=$CODE"
+            done ;;
+        remove)
+            device_name_by_code "$CODE" >/dev/null || die "$(t mac.err.noDevice "$CODE")"
+            keep=(); keep_hk=()
+            for i in "${!DEVICES[@]}"; do
+                [ "${DEVICES[$i]##*=}" = "$CODE" ] && continue
+                keep+=("${DEVICES[$i]}"); keep_hk+=("${HOTKEY_DEVICES[$i]}")
+            done
+            DEVICES=(); HOTKEY_DEVICES=()
+            [ ${#keep[@]} -gt 0 ] && { DEVICES=("${keep[@]}"); HOTKEY_DEVICES=("${keep_hk[@]}"); } ;;
+    esac
+    write_config
+    log "device: $sub $CODE ${NAME:-}"
+    reload_daemon
+    say_done
+}
+
+# 快捷键的写法：修饰键（ctrl、opt/alt/option、shift、cmd/command/win）至少一个，加一个数字或字母，用 + 连接；
+# 不分大小写。规范成 ctrl+opt+shift+cmd+<键> 的顺序放进 HOTKEY；写法不对返回 1
+norm_hotkey() {
+    local spec key m mods="" c=0 o=0 s=0 k=0 part
+    spec=$(printf '%s' "$1" | tr 'A-Z' 'a-z' | tr -d ' ')
+    key=${spec##*+}
+    case "$key" in [0-9a-z]) ;; *) return 1 ;; esac
+    [ "$spec" != "$key" ] || return 1
+    m=${spec%+*}
+    local IFS=+
+    for part in $m; do
+        case "$part" in
+            ctrl|control) c=1 ;;
+            opt|option|alt) o=1 ;;
+            shift) s=1 ;;
+            cmd|command|win|meta|super) k=1 ;;
+            *) return 1 ;;
+        esac
+    done
+    [ $c = 1 ] && mods="${mods}ctrl+"
+    [ $o = 1 ] && mods="${mods}opt+"
+    [ $s = 1 ] && mods="${mods}shift+"
+    [ $k = 1 ] && mods="${mods}cmd+"
+    [ -n "$mods" ] || return 1
+    HOTKEY="$mods$key"
+}
+
+# 这个组合键是否已经给了别的动作（$2 = 本动作：peer 或设备编码）
+hotkey_used_by_other() {
+    local i
+    [ "$2" != peer ] && [ "$HOTKEY_PEER" = "$1" ] && return 0
+    for i in "${!DEVICES[@]}"; do
+        [ "${DEVICES[$i]##*=}" = "$2" ] && continue
+        [ "${HOTKEY_DEVICES[$i]}" = "$1" ] && return 0
+    done
+    return 1
+}
+
+# set owned-layout extend|main-only | auto-save on|off | direct-take on|off | hotkey peer|<编码> <组合>|none。
+# 旧写法 set AUTO_SAVE_LAYOUT 0|1、set OWNED_LAYOUT extend|external 照旧可用
+cmd_set() {
+    local item=$1 v=$2 i found
+    case "$item" in
+        AUTO_SAVE_LAYOUT|OWNED_LAYOUT)
+            case "$item=$v" in AUTO_SAVE_LAYOUT=0|AUTO_SAVE_LAYOUT=1|OWNED_LAYOUT=extend|OWNED_LAYOUT=external) ;; *) die "$(t mac.usage.set)" ;; esac
+            [ "$item" = AUTO_SAVE_LAYOUT ] && { [ "$v" = 1 ] && v=on || v=off; set_auto_save "$v"; return; }
+            [ "$v" = external ] && v=main-only
+            set_owned_layout "$v"; return ;;
+        owned-layout)
+            [ $# -eq 2 ] || die "$(t mac.usage.set)"
+            set_owned_layout "$v" ;;
+        auto-save)
+            [ $# -eq 2 ] || die "$(t mac.usage.set)"
+            set_auto_save "$v" ;;
+        direct-take)
+            [ $# -eq 2 ] || die "$(t mac.usage.set)"
+            case "$v" in on) v=1 ;; off) v=0 ;; *) die "$(t mac.usage.set)" ;; esac
+            load_config; DIRECT_TAKE=$v; write_config
+            log "set: DIRECT_TAKE=$v"
+            reload_daemon
+            say_done ;;
+        hotkey)
+            [ $# -eq 3 ] || die "$(t mac.usage.set)"
+            local who=$2 combo=$3
+            HOTKEY=""
+            if [ "$combo" != none ]; then
+                norm_hotkey "$combo" || die "$(t mac.err.badHotkey "$combo")"
+            fi
+            load_config
+            if [ -n "$HOTKEY" ] && hotkey_used_by_other "$HOTKEY" "$who"; then
+                die "$(t mac.err.hotkeyTaken "$HOTKEY")"
+            fi
+            if [ "$who" = peer ]; then
+                HOTKEY_PEER=$HOTKEY
+            else
+                need_code "$who"
+                found=0
+                for i in "${!DEVICES[@]}"; do
+                    [ "${DEVICES[$i]##*=}" = "$CODE" ] && { HOTKEY_DEVICES[$i]=$HOTKEY; found=1; }
+                done
+                [ $found = 1 ] || die "$(t mac.err.noDevice "$CODE")"
+            fi
+            write_config
+            log "set: hotkey $who=${HOTKEY:-none}"
+            say_done ;;
+        *) die "$(t mac.usage.set)" ;;
+    esac
+}
+
+set_auto_save() {
+    local v
+    case "$1" in on) v=1 ;; off) v=0 ;; *) die "$(t mac.usage.set)" ;; esac
+    load_config; AUTO_SAVE_LAYOUT=$v; write_config
+    log "set: AUTO_SAVE_LAYOUT=$v"
+    reload_daemon
+    say_done
+}
+
+# 拿回后的布局。守护进程在跑时交给它：主屏正在本机就立即按新布局生效
+set_owned_layout() {
+    local v
+    case "$1" in extend) v=extend ;; main-only) v=external ;; *) die "$(t mac.usage.set)" ;; esac
+    if [ "$v" = external ] && { [ "$SECOND_BUILTIN" != 1 ] || [ "$LAYOUT" = none ]; }; then
+        die "$(t mac.err.mainOnlyUnsupported)"
+    fi
+    load_config; OWNED_LAYOUT=$v; write_config
+    log "set: OWNED_LAYOUT=$v"
+    reload_daemon "set OWNED_LAYOUT $v"
+    say_done
+}
+
+# 开机自动运行：两个 LaunchAgent（守护进程、菜单栏程序）放进或移出 ~/Library/LaunchAgents。
+# 关掉时正在运行的不停，只是下次登录不再启动；模板在 $SCREENCTL_DIR/launchd（install.sh 放的）
+cmd_autostart() {
+    local l src
+    case "$1" in
+        on)
+            mkdir -p "$LAUNCH_AGENTS_DIR"
+            for l in $AGENT_LABELS; do
+                [ -f "$LAUNCH_AGENTS_DIR/$l.plist" ] && continue
+                src="$SCREENCTL_DIR/launchd/$l.plist"
+                [ -f "$src" ] || die "$(t mac.err.noAgentTemplate "$src")"
+                cp -f "$src" "$LAUNCH_AGENTS_DIR/$l.plist" || die "$(t mac.err.writeFailed "$LAUNCH_AGENTS_DIR/$l.plist")"
+            done
+            log "autostart: on" ;;
+        off)
+            for l in $AGENT_LABELS; do rm -f "$LAUNCH_AGENTS_DIR/$l.plist"; done
+            log "autostart: off" ;;
+        *) die "$(t mac.usage.autostart)" ;;
+    esac
+    say_done
 }
 
 # ---------------------------------------------------------------- 设置问答
@@ -1675,7 +2328,7 @@ cmd_init() {
 # 提问：$1 = 问题，$2 = 默认值。回答放进 ANSWER，直接回车取默认值；输入读完了（非交互）也取默认值
 ask() {
     local a=""
-    if [ -n "$2" ]; then printf '%s [%s]：' "$1" "$2"; else printf '%s：' "$1"; fi
+    if [ -n "$2" ]; then printf '%s [%s]%s' "$1" "$2" "$(t mac.setup.colon)"; else printf '%s%s' "$1" "$(t mac.setup.colon)"; fi
     IFS= read -r a || true
     [ -n "$a" ] || a=$2
     ANSWER=$a
@@ -1691,41 +2344,42 @@ setup_devices() {
     local i e name code
     local -a keep keep_hk
     echo
-    echo "== 其他设备（游戏机等）=="
+    echo "$(t mac.setup.devicesTitle)"
     if [ ${#DEVICES[@]} -gt 0 ]; then
-        echo "现在的设备："
+        echo "$(t mac.setup.devicesNow)"
         i=1
-        for e in "${DEVICES[@]}"; do echo "  $i. ${e%=*}（编码 ${e##*=}）"; i=$((i + 1)); done
-        ask "要删除哪几个（输入编号，空格分隔；改名请先删除再添加；都保留就直接回车）" ""
+        for e in "${DEVICES[@]}"; do echo "  $i. $(t mac.setup.deviceLine "${e%=*}" "${e##*=}")"; i=$((i + 1)); done
+        ask "$(t mac.setup.askRemove)" ""
         if [ -n "$ANSWER" ]; then
             keep=(); keep_hk=(); i=1
             for e in "${DEVICES[@]}"; do
                 case " $ANSWER " in
-                    *" $i "*) echo "  已删除：${e%=*}" ;;
+                    *" $i "*) echo "  $(t mac.setup.removed "${e%=*}")" ;;
                     *) keep+=("$e"); keep_hk+=("${HOTKEY_DEVICES[$((i - 1))]}") ;;
                 esac
                 i=$((i + 1))
             done
-            DEVICES=("${keep[@]}"); HOTKEY_DEVICES=("${keep_hk[@]}")
+            DEVICES=(); HOTKEY_DEVICES=()
+            [ ${#keep[@]} -gt 0 ] && { DEVICES=("${keep[@]}"); HOTKEY_DEVICES=("${keep_hk[@]}"); }
         fi
     fi
-    echo "主屏的每个输入口有一个编码。常见的是：15 = DP 1（不少显示器的 USB-C 也用它）、16 = DP 2、17 = HDMI 1、18 = HDMI 2。"
-    if [ -n "$CODE_PEER" ]; then echo "本机用的是 $CODE_SELF，$PEER_NAME 用的是 $CODE_PEER。"; else echo "本机用的是 $CODE_SELF。"; fi
+    echo "$(t mac.setup.codesHelp)"
+    if [ -n "$CODE_PEER" ]; then echo "$(t mac.setup.codesInUsePeer "$CODE_SELF" "$PEER_NAME" "$CODE_PEER")"; else echo "$(t mac.setup.codesInUse "$CODE_SELF")"; fi
     while :; do
-        ask "要添加的设备的名字（不添加就直接回车）" ""
+        ask "$(t mac.setup.askDeviceName)" ""
         name=$(clean_value "$ANSWER")
         [ -n "$name" ] || break
-        ask "$name 接的输入口编码" ""
+        ask "$(t mac.setup.askDeviceCode "$name")" ""
         code=$ANSWER
         if ! is_int "$code" || [ "$code" -lt 1 ] || [ "$code" -gt 255 ]; then
-            echo "  编码要是 1 到 255 之间的数字，没有添加"
+            echo "  $(t mac.setup.badCode)"
         elif [ "$code" = "$CODE_SELF" ] || [ "$code" = "$CODE_PEER" ]; then
-            echo "  编码 $code 是电脑在用的口，没有添加"
+            echo "  $(t mac.setup.codeIsComputer "$code")"
         elif device_name_by_code "$code" >/dev/null; then
-            echo "  编码 $code 已经有设备了，没有添加"
+            echo "  $(t mac.setup.codeTaken "$code")"
         else
-            DEVICES+=("$name=$code"); HOTKEY_DEVICES+=("")
-            echo "  已添加：$name（编码 $code）"
+            DEVICES+=("$name=$code"); HOTKEY_DEVICES[$(( ${#DEVICES[@]} - 1 ))]=""
+            echo "  $(t mac.setup.added "$name" "$code")"
         fi
     done
 }
@@ -1733,12 +2387,8 @@ setup_devices() {
 # 设置写完之后：让守护进程重新读配置
 setup_done() {
     echo
-    echo "已写入 $CONFIG"
-    if daemon_alive; then
-        write_cmd reload
-        echo "守护进程已重新读取配置。"
-    fi
-    echo "菜单栏程序下次点开菜单时会更新。"
+    echo "$(t mac.setup.written "$CONFIG")"
+    reload_daemon
 }
 
 # 交互式设置（设计文档 9）：setup [显示器名] 走全部步骤；setup devices 只增删其他设备
@@ -1751,85 +2401,82 @@ cmd_setup() {
         setup_done
         return 0
     fi
-    cmd_init "$@"
+    detect_preflight
+    if [ -n "$1" ]; then cmd_detect --main "$1" >/dev/null; else cmd_detect >/dev/null; fi || exit 1
+    load_config
+    echo "$(t mac.setup.detected "$MAIN_NAME" "$CODE_SELF")"
 
     echo
-    echo "== 本机 =="
-    ask "这台电脑在菜单和提示里叫什么" "$(self_name)"
+    echo "$(t mac.setup.selfTitle)"
+    ask "$(t mac.setup.askSelfName)" "$(self_name)"
     SELF_NAME=$(clean_value "$ANSWER")
 
     echo
-    echo "== 对方电脑 =="
-    echo "填了对方电脑，两台才能互相代为切换。没有，或者暂时不配：主机名填 - 。"
-    ask "对方电脑的主机名（如 my-pc.local）或局域网 IP" "${PEER_HOST:--}"
+    echo "$(t mac.setup.peerTitle)"
+    echo "$(t mac.setup.peerHelp)"
+    ask "$(t mac.setup.askHost)" "${PEER_HOST:--}"
     PEER_HOST=$(clean_value "$ANSWER")
     [ "$PEER_HOST" = - ] && PEER_HOST=""
     if [ -n "$PEER_HOST" ]; then
         auto_name=0
         { [ "$PEER_NAME" = Windows ] || [ "$PEER_NAME" = Mac ]; } && auto_name=1
-        ask "对方是 Windows 还是 Mac（输入 windows 或 mac）" "$PEER_OS"
+        ask "$(t mac.setup.askOs)" "$PEER_OS"
         case "$ANSWER" in mac|Mac|MAC|m|M) os=mac ;; *) os=windows ;; esac
         [ "$os" = "$PEER_OS" ] || PEER_PROG=""
         PEER_OS=$os
         if [ $auto_name -eq 1 ]; then
             if [ "$PEER_OS" = mac ]; then PEER_NAME=Mac; else PEER_NAME=Windows; fi
         fi
-        ask "对方电脑在菜单和提示里叫什么" "$PEER_NAME"
+        ask "$(t mac.setup.askPeerName)" "$PEER_NAME"
         PEER_NAME=$(clean_value "$ANSWER")
-        ask "对方电脑上的用户名" "$PEER_USER"
+        ask "$(t mac.setup.askUser)" "$PEER_USER"
         PEER_USER=$(clean_value "$ANSWER")
         prog=$PEER_PROG
-        if [ -z "$prog" ]; then
-            if [ "$PEER_OS" = mac ]; then prog='~/screenctl/screenctl.sh'
-            else prog="C:\\Users\\$PEER_USER\\ScreenSwitch\\ScreenSwitch.exe"; fi
-        fi
-        ask "对方电脑上本程序的路径" "$prog"
+        [ -n "$prog" ] || prog=$(default_peer_prog "$PEER_OS" "$PEER_USER")
+        ask "$(t mac.setup.askProg)" "$prog"
         PEER_PROG=$(clean_value "$ANSWER")
 
         echo
         echo "== SSH =="
         if [ ! -f "$SSH_KEY.pub" ]; then
-            ask "本机还没有 SSH 密钥（$SSH_KEY），现在生成吗（y / n）" "y"
+            ask "$(t mac.setup.askKeygen "$SSH_KEY")" "y"
             case "$ANSWER" in
-                y|Y|yes)
-                    mkdir -p "$(dirname "$SSH_KEY")"
-                    ssh-keygen -t ed25519 -N "" -C "screenctl@$(scutil --get LocalHostName 2>/dev/null)" -f "$SSH_KEY" >/dev/null \
-                        && echo "  已生成" ;;
+                y|Y|yes) cmd_pubkey >/dev/null && echo "  $(t mac.setup.keygenDone)" ;;
             esac
         fi
         if [ -f "$SSH_KEY.pub" ]; then
             pub=$(cat "$SSH_KEY.pub")
-            echo "本机的公钥："
+            echo "$(t mac.setup.selfKey)"
             echo "  $pub"
             if [ "$PEER_OS" = windows ]; then
-                echo "在 $PEER_NAME 上用管理员 PowerShell、在仓库目录里运行："
+                echo "$(t mac.setup.authorizeOnWindows "$PEER_NAME")"
                 echo "  powershell -ExecutionPolicy Bypass -File .\\setup-sshd.ps1 -PeerPubKey \"$pub\""
             else
-                echo "在 $PEER_NAME 上运行："
+                echo "$(t mac.setup.authorizeOnMac "$PEER_NAME")"
                 echo "  ~/screenctl/screenctl.sh authorize \"$pub\""
             fi
         fi
-        echo "拿到 $PEER_NAME 的公钥后，在本机运行：$0 authorize \"<它的公钥>\""
-        echo "并在 系统设置 → 通用 → 共享 里打开"远程登录"。"
+        echo "$(t mac.setup.authorizeHere "$PEER_NAME" "$0")"
+        echo "$(t mac.setup.remoteLogin)"
 
         echo
-        echo "正在向 $PEER_NAME 询问它的输入口编码和设备列表…"
+        echo "$(t mac.setup.asking "$PEER_NAME")"
         if peer_info; then
             if [ -n "$INFO_CODE" ]; then
                 CODE_PEER=$INFO_CODE
-                echo "  $PEER_NAME 接在编码 $CODE_PEER 的输入口"
+                echo "  $(t mac.setup.peerCode "$PEER_NAME" "$CODE_PEER")"
             fi
             if [ ${#INFO_DEVICES[@]} -gt 0 ] && [ ${#DEVICES[@]} -eq 0 ]; then
                 DEVICES=(); HOTKEY_DEVICES=()
                 for e in "${INFO_DEVICES[@]}"; do
                     n=$(clean_value "${e%=*}")
-                    DEVICES+=("$n=${e##*=}"); HOTKEY_DEVICES+=("")
-                    echo "  从 $PEER_NAME 读到设备：$n（编码 ${e##*=}）"
+                    DEVICES+=("$n=${e##*=}"); HOTKEY_DEVICES[$(( ${#DEVICES[@]} - 1 ))]=""
+                    echo "  $(t mac.setup.peerDevice "$PEER_NAME" "$n" "${e##*=}")"
                 done
             fi
         else
-            echo "  现在连不上 $PEER_NAME（SSH 还没配好也没关系）。"
-            ask "  $PEER_NAME 接在主屏的哪个输入口（编码；不知道就直接回车，以后切换时会自动询问）" "$CODE_PEER"
+            echo "  $(t mac.setup.peerOffline "$PEER_NAME")"
+            ask "  $(t mac.setup.askPeerCode "$PEER_NAME")" "$CODE_PEER"
             if is_int "$ANSWER" && [ "$ANSWER" -ge 1 ] && [ "$ANSWER" -le 255 ]; then CODE_PEER=$ANSWER; fi
         fi
     fi
@@ -1837,34 +2484,34 @@ cmd_setup() {
     setup_devices
     write_config
     setup_done
-    if [ -n "$PEER_HOST" ] || [ "$LAYOUT" != "" ]; then
-        echo "如果守护进程正在运行，执行一次让它按新设置重新启动：launchctl kickstart -k gui/\$(id -u)/com.user.screenctl"
-    fi
 }
 
 # 把对方电脑的公钥加进 authorized_keys，限定为只能调用本机的 ssh-gate（拿不到 shell、不能端口转发）。
 # 这把公钥原有的条目会被替换
 cmd_authorize() {
     local key=$1 ak=${AUTHORIZED_KEYS:-$HOME/.ssh/authorized_keys} blob tmp
+    key=$(printf '%s' "$key" | tr -d '\r\n')
     case "$key" in
         ssh-*|ecdsa-*|sk-*) ;;
-        *) die "用法：$0 authorize \"<对方电脑的公钥，形如 ssh-ed25519 AAAA… 注释>\"" ;;
+        *) die "$(t mac.err.badKey)" ;;
     esac
     blob=$(printf '%s\n' "$key" | awk '{print $2}')
-    [ -n "$blob" ] || die "公钥格式不对：要有类型和内容两段"
+    [ -n "$blob" ] || die "$(t mac.err.badKey)"
     mkdir -p "$(dirname "$ak")" && chmod 700 "$(dirname "$ak")"
     [ -f "$ak" ] || : > "$ak"
     tmp="$ak.screenctl.$$"
     grep -vF " $blob" "$ak" > "$tmp"
     printf 'command="%s/screenctl.sh ssh-gate",no-port-forwarding,no-agent-forwarding,no-pty,no-X11-forwarding %s\n' \
         "$SCREENCTL_DIR" "$key" >> "$tmp"
-    chmod 600 "$tmp" && mv -f "$tmp" "$ak" || die "写入 $ak 失败"
-    echo "已把这把公钥加进 $ak，它只能调用 $SCREENCTL_DIR/screenctl.sh ssh-gate。"
+    chmod 600 "$tmp" && mv -f "$tmp" "$ak" || die "$(t mac.err.writeFailed "$ak")"
+    log "authorize: 已授权 $(printf '%s' "$key" | awk '{print $1, $3}')"
+    say_done
 }
 
 # 菜单栏程序读取（设计文档 8）：每行一个 键=值；设备为 device=<编码><Tab><名字><Tab><快捷键>
 cmd_menu_info() {
     local i=0 e
+    if configured; then echo "configured=1"; else echo "configured=0"; fi
     echo "self=$(self_name)"
     if peer_configured; then echo "peer=$PEER_NAME"; else echo "peer="; fi
     echo "layout=$LAYOUT"
@@ -1878,62 +2525,53 @@ cmd_menu_info() {
     done
 }
 
+# 现在记住当前排列：本进程直接读、写配置（设置窗口要立刻知道成没成），再让守护进程重新读取
 cmd_save_layout() {
     need_config
-    if daemon_alive; then
-        write_cmd "save-layout"
-        echo "已交给守护进程：save-layout"
-        return 0
-    fi
     MODE=direct
-    do_save_layout manual || die "$CUR_ERR"
-    echo "已保存：displayplacer$(printf ' "%s"' "${EXTEND_ARGS[@]}")"
-}
-
-cmd_set() {
-    need_config
-    case "$1=$2" in
-        AUTO_SAVE_LAYOUT=0|AUTO_SAVE_LAYOUT=1|OWNED_LAYOUT=extend|OWNED_LAYOUT=external) ;;
-        *) die "用法：$0 set AUTO_SAVE_LAYOUT <0|1> | set OWNED_LAYOUT <extend|external>" ;;
-    esac
-    if daemon_alive; then
-        write_cmd "set $1 $2"
-        echo "已交给守护进程：set $1 $2"
-        return 0
-    fi
-    MODE=direct
-    do_set "$1" "$2"
-    echo "已设置 $1=$2"
+    do_save_layout manual || die "$(t mac.notify.saveFailed "$CUR_ERR")"
+    reload_daemon
+    say_done
 }
 
 usage() {
     cat <<EOF
-用法：$0 <子命令>
-  setup [显示器名]           交互式设置：探测主屏和屏幕组合，填对方电脑和其他设备（主屏显示本机时运行）
-  setup devices              只增删其他设备
-  init [显示器名]            只做探测，不提问
-  authorize <公钥>           把对方电脑的公钥加进 authorized_keys，限定为 ssh-gate
-  give peer | self | <设备名或编码>   切给对方 / 拿回 / 切给某个设备
-  take | release             手动拿回 / 让出
-  status                     查看归属与守护进程
-  save-layout                把当前扩展排列保存为"拿回"排列
-  set AUTO_SAVE_LAYOUT <0|1> 开关"自动记住屏幕排列"
-  set OWNED_LAYOUT <extend|external>  拿回后扩展，或仅大屏（关闭笔记本屏）
-  request give peer | request give code <n> | request take | request info   供对方 SSH 调用
-  menu-info                  菜单栏程序读取
-  watch                      守护进程
+$(t mac.usage.title "$0")
+  status                          $(t mac.usage.status)
+  detect [--main <model>]         $(t mac.usage.detectHelp)
+  ports                           $(t mac.usage.portsHelp)
+  peer set --os <windows|mac> --host <host> --user <user> [--name <name>]
+  peer clear | peer test | peer code <n>|none
+  pubkey                          $(t mac.usage.pubkeyHelp)
+  authorize "<public key>"        $(t mac.usage.authorizeHelp)
+  device add|rename <n> <name> | device remove <n>
+  set owned-layout extend|main-only | auto-save on|off | direct-take on|off
+  set hotkey peer|<n> <combo>|none   ($(t mac.usage.hotkeyExample))
+  autostart on|off
+  setup [<model>] | setup devices $(t mac.usage.setupHelp)
+  give peer | self | <device>     $(t mac.usage.giveHelp)
+  take | release | save-layout | diag
+  request give peer | request give code <n> | request take | request info
+  displays | menu-info | watch | ssh-gate
 EOF
 }
 
 case "${1:-}" in
-    init) shift; cmd_init "$@" ;;
+    detect|init) shift; cmd_detect "$@" ;;
     setup) shift; cmd_setup "$@" ;;
-    authorize) cmd_authorize "${2:-}" ;;
+    authorize) [ $# -eq 2 ] || die "$(t mac.err.badKey)"; cmd_authorize "$2" ;;
     give) shift; cmd_give "$@" ;;
     take|release) cmd_take_release "$1" ;;
     status) cmd_status ;;
+    diag) cmd_diag ;;
+    ports) shift; cmd_ports "$@" ;;
+    displays) cmd_displays ;;
+    peer) shift; cmd_peer "$@" ;;
+    pubkey) cmd_pubkey ;;
+    device) shift; cmd_device "$@" ;;
+    set) shift; cmd_set "$@" ;;
+    autostart) [ $# -eq 2 ] || die "$(t mac.usage.autostart)"; cmd_autostart "$2" ;;
     save-layout) cmd_save_layout ;;
-    set) cmd_set "${2:-}" "${3:-}" ;;
     request) shift; cmd_request "$@" ;;
     menu-info) cmd_menu_info ;;
     watch) cmd_watch ;;

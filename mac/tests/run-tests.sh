@@ -7,7 +7,7 @@ FAKE=$HERE/fake
 ROOT=$(mktemp -d "${TMPDIR:-/tmp}/screenctl-test.XXXXXX")
 trap 'kill $DPID 2>/dev/null; rm -rf "$ROOT"' EXIT
 export M1DDC=$FAKE/m1ddc DISPLAYPLACER=$FAKE/displayplacer SSH_BIN=$FAKE/ssh DISPLAY_HELPER=$FAKE/display-helper IOREG=$FAKE/ioreg
-export FAKE_SRC=$SRC
+export FAKE_SRC=$SRC SCREENSWITCH_LANG=zh
 S="/bin/bash $SRC"
 # 换一套全新的假环境（新的显示器状态、新的安装目录）：$1 = 场景名
 fresh() {
@@ -72,14 +72,14 @@ expect_rc 1 $S request take windows
 expect_rc 3 $S request take
 out=$($S request info); rc=$?
 [ $rc -eq 0 ] && [ "$out" = "proto=3 os=mac code=15 name=TWFjQm9vaw== devices=17:U3dpdGNo,18:UFM1" ] && ok "request info：守护进程没在运行也回答，格式与规范 5.4 的例子一致" || bad "info: rc=$rc [$out]"
-$S status | head -1 | grep -q "owned=1" && ok "status 直接读取 owned=1" || bad "status direct"
+$S diag | head -1 | grep -q "owned=1" && ok "status 直接读取 owned=1" || bad "status direct"
 
 echo "== 启动对账：占有但镜像 → 拿回"
 echo mirror > $FAKE_DIR/layout
 start_daemon
 t=$(wait_for 5 '[ "$(cat $FAKE_DIR/layout)" = extend ]') && ok "reconcile take ${t}s" || bad "reconcile take"
 wait_for 2 '[ "$(owned)" = owned=1 ]' >/dev/null && ok "state owned=1" || bad "state"
-$S status | head -1 | grep -q "owned=1" && ok "status owned=1" || bad "status"
+$S diag | head -1 | grep -q "owned=1" && ok "status owned=1" || bad "status"
 expect_rc 1 $S request give foo
 expect_rc 0 $S request give peer
 t=$(wait_for 6 '[ "$(cat $FAKE_DIR/layout)" = mirror ]') && ok "request give peer → mirror ${t}s" || bad "give peer"
@@ -206,7 +206,7 @@ sed 's/origin:(2560,0)/origin:(-1470,0)/' $FAKE_DIR/extend_line > $FAKE_DIR/x &&
 sleep 6; grep -q "origin:(-1470,0)" $SCREENCTL_DIR/config.sh && bad "关闭后仍自动保存" || ok "关闭后不再自动保存"
 : > $SCREENCTL_NOTIFY_FILE; $S save-layout >/dev/null
 t=$(wait_for 4 'grep -q "origin:(-1470,0)" $SCREENCTL_DIR/config.sh') && ok "手动保存 ${t}s" || bad "manual save"
-wait_for 3 'notified "已保存当前屏幕排列"' >/dev/null && ok "手动保存有通知" || bad "manual notify"
+wait_for 3 'notified "已记住当前屏幕排列"' >/dev/null && ok "手动保存有通知" || bad "manual notify"
 expect_rc 1 $S set FOO 1
 $S give peer >/dev/null; wait_for 5 '[ "$(cat $FAKE_DIR/layout)" = mirror ]' >/dev/null
 : > $SCREENCTL_NOTIFY_FILE; $S save-layout >/dev/null; wait_for 3 '[ -s $SCREENCTL_NOTIFY_FILE ]' >/dev/null
@@ -222,7 +222,7 @@ wait_for 5 '[ "$(owned)" = owned=1 ]' >/dev/null
 $S set OWNED_LAYOUT external >/dev/null
 t=$(wait_for 6 '[ "$(laptop)" = off ]') && ok "占有时选仅大屏，立即关闭笔记本屏 ${t}s" || bad "external apply"
 grep -q "^OWNED_LAYOUT='external'" $SCREENCTL_DIR/config.sh && grep -q "^LAPTOP_CGID=1" $SCREENCTL_DIR/config.sh && ok "配置记住偏好与显示编号" || bad "config external"
-$S status | grep -q "layout=external" && ok "status 显示 layout=external" || bad "status external"
+$S diag | grep -q "layout=external" && ok "status 显示 layout=external" || bad "status external"
 : > $FAKE_DIR/order.log
 $S give peer >/dev/null
 t=$(wait_for 8 '[ "$(lay)" = mirror ] && [ "$(laptop)" = on ]') && ok "切给对方：切走后打开笔记本屏并镜像 ${t}s" || bad "give peer from external: $(lay) $(laptop)"
@@ -239,7 +239,7 @@ touch $FAKE_DIR/solo_fail; n=$(dpn)
 echo 15 > $FAKE_DIR/input; wait_for 8 '[ "$(laptop)" = off ]' >/dev/null
 [ "$(laptop)" = off ] && [ "$(dpn)" -gt "$n" ] && tail -1 $FAKE_DIR/helper.log | grep -q "disable 1" && ok "solo 失败时退回 扩展→关笔记本屏" || bad "solo fallback: laptop=$(laptop) dp=$n→$(dpn) $(tail -1 $FAKE_DIR/helper.log)"
 rm -f $FAKE_DIR/solo_fail
-curmode() { $S status | sed -n 's/^layout=//p'; }
+curmode() { $S diag | sed -n 's/^layout=//p'; }
 nolayout() { ! grep -qv '^ddc set' $FAKE_DIR/order.log; }   # order.log 里只有 DDC 写入，没有任何布局调用
 touch $FAKE_DIR/ddc_set_fail; : > $SCREENCTL_NOTIFY_FILE; : > $FAKE_DIR/order.log
 $S give peer >/dev/null; wait_for 6 'notified "写入 DDC 失败"' >/dev/null
@@ -555,7 +555,7 @@ CFG
 nolayout() { ! grep -qv '^ddc set' $FAKE_DIR/order.log 2>/dev/null; }   # order.log 里只有 DDC 写入，没有任何布局调用
 : > $FAKE_DIR/order.log
 start_daemon; wait_for 5 '[ "$(owned)" = owned=1 ]' >/dev/null && ok "启动：占有" || bad "solo start: $(owned)"
-$S status | grep -qx "layout=none" && ok "status 显示 layout=none" || bad "status: $($S status | tr '\n' '|')"
+$S diag | grep -qx "layout=none" && ok "status 显示 layout=none" || bad "status: $($S diag | tr '\n' '|')"
 $S give peer >/dev/null
 t=$(wait_for 6 '[ "$(cat $FAKE_DIR/input)" = 16 ] && [ "$(owned)" = owned=0 ]') && ok "切给对方：只写 DDC，归属变为未占有 ${t}s" || bad "solo give: input=$(cat $FAKE_DIR/input) $(owned)"
 out=$($S request take); rc=$?
@@ -599,8 +599,9 @@ grep -q '^helper' $FAKE_DIR/order.log && bad "外接屏不该去开关：$(grep 
 echo 15 > $FAKE_DIR/input
 t=$(wait_for 8 '[ "$(cat $FAKE_DIR/layout)" = extend ] && [ "$(owned)" = owned=1 ]') && ok "切回来：恢复扩展 ${t}s" || bad "ext take: $(cat $FAKE_DIR/layout) $(owned)"
 : > $SCREENCTL_NOTIFY_FILE
-$S set OWNED_LAYOUT external >/dev/null; wait_for 4 '[ -s $SCREENCTL_NOTIFY_FILE ]' >/dev/null
-notified "不支持" && grep -q "^OWNED_LAYOUT='extend'" $SCREENCTL_DIR/config.sh && ok "另一块屏是外接屏时不提供"仅大屏"" || bad "ext external: $(cat $SCREENCTL_NOTIFY_FILE) $(grep '^OWNED_LAYOUT' $SCREENCTL_DIR/config.sh)"
+out=$($S set owned-layout main-only 2>&1); rc=$?
+[ $rc -eq 1 ] && case "$out" in "error: "*"不支持"*) true ;; *) false ;; esac && grep -q "^OWNED_LAYOUT='extend'" $SCREENCTL_DIR/config.sh \
+  && ok "另一块屏是外接屏时不提供"只用主屏"：退出码 1，error: 开头" || bad "ext external: rc=$rc [$out] $(grep '^OWNED_LAYOUT' $SCREENCTL_DIR/config.sh)"
 $S menu-info | grep -qx "second_builtin=0" && ok "menu-info 报告 second_builtin=0（菜单据此隐藏"仅大屏"）" || bad "menu-info ext"
 sleep 3
 touch $FAKE_DIR/second_unplugged; : > $FAKE_DIR/order.log; : > $SCREENCTL_NOTIFY_FILE
@@ -629,7 +630,7 @@ t=$(wait_for 6 '[ "$(cat $FAKE_DIR/input)" = 16 ] && [ "$(owned)" = owned=0 ]') 
 sleep 6
 ! grep -qv '^ddc set' $FAKE_DIR/order.log && ok "合着盖子：不做布局操作，不去开笔记本屏" || bad "lid layout calls: $(tr '\n' ';' < $FAKE_DIR/order.log)"
 notified "合上再打开" && bad "lid: 提示了合上再打开盖子" || ok "没有"笔记本屏无法恢复"的提示"
-$S status | grep -qx "layout=none" && ok "status 显示 layout=none（盖子合着）" || bad "lid status: $($S status | tr '\n' '|')"
+$S diag | grep -qx "layout=none" && ok "status 显示 layout=none（盖子合着）" || bad "lid status: $($S diag | tr '\n' '|')"
 rm -f $FAKE_DIR/lid_closed   # 打开盖子：自带屏回来，系统把它摆成扩展，主屏还在对方那里
 t=$(wait_for 12 '[ "$(cat $FAKE_DIR/layout)" = mirror ]') && ok "开盖后发现主屏在线却不是镜像：改回镜像 ${t}s" || bad "lid open not re-mirrored: $(cat $FAKE_DIR/layout)"
 touch $FAKE_DIR/lid_closed; : > $FAKE_DIR/order.log
