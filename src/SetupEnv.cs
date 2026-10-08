@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Security.Principal;
 using System.Text;
 
 namespace ScreenSwitch
@@ -134,10 +136,66 @@ namespace ScreenSwitch
             return null;
         }
 
-        // 占位，Task 5 换成真实现
-        public string GenerateKey() { return PublicKey(); }
-        public int AuthorizePeerKey(string safeKey, bool elevate, out string output) { output = ""; return 2; }
-        public bool IsAdmin() { return false; }
+        public string GenerateKey()
+        {
+            try
+            {
+                string home = Environment.GetEnvironmentVariable("USERPROFILE");
+                string sshDir = Path.Combine(home, ".ssh");
+                Directory.CreateDirectory(sshDir);
+                string key = Path.Combine(sshDir, "id_ed25519");
+                string exe = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32\\OpenSSH\\ssh-keygen.exe");
+                string output;
+                int rc = RunUtf8(File.Exists(exe) ? exe : "ssh-keygen.exe",
+                    "-t ed25519 -N \"\" -f \"" + key + "\" -C screen-switch@" + Environment.MachineName, 30000, out output);
+                log.Info("setup: ssh-keygen -> " + rc);
+            }
+            catch (Exception e) { log.Error("setup: ssh-keygen: " + e.Message); }
+            return PublicKey();
+        }
+
+        public bool IsAdmin()
+        {
+            return new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator);
+        }
+
+        // 运行程序旁边的 setup-sshd.ps1 -PeerPubKey。已是管理员：直接运行并读输出；否则 elevate 为 true 时
+        // 弹系统的管理员确认（看不到输出，看 setup-sshd.log 里有没有 SETUP OK），为 false 时返回 2。
+        public int AuthorizePeerKey(string safeKey, bool elevate, out string output)
+        {
+            output = "";
+            string script = Path.Combine(dir, "setup-sshd.ps1");
+            if (!File.Exists(script)) return -1;
+            string ps = Path.Combine(Environment.SystemDirectory, "WindowsPowerShell\\v1.0\\powershell.exe");
+            string args = "-NoProfile -ExecutionPolicy Bypass -File \"" + script + "\" -PeerPubKey \"" + safeKey + "\"";
+            if (IsAdmin())
+            {
+                int rc = RunUtf8(ps, args, 180000, out output);
+                log.Info("setup: setup-sshd.ps1 (admin) -> " + rc);
+                return output.Contains("SETUP OK") ? 0 : 1;
+            }
+            if (!elevate) return 2;
+            string logPath = Path.Combine(Environment.GetEnvironmentVariable("USERPROFILE"), "ScreenSwitch\\setup-sshd.log");
+            DateTime before = File.Exists(logPath) ? File.GetLastWriteTimeUtc(logPath) : DateTime.MinValue;
+            try
+            {
+                var psi = new ProcessStartInfo(ps, args);
+                psi.UseShellExecute = true; psi.Verb = "runas"; psi.WindowStyle = ProcessWindowStyle.Hidden;
+                using (Process p = Process.Start(psi))
+                {
+                    if (!p.WaitForExit(180000)) return 1;
+                }
+            }
+            catch (Win32Exception e)
+            {
+                log.Info("setup: setup-sshd.ps1 elevation: " + e.NativeErrorCode);
+                return e.NativeErrorCode == 1223 ? 1223 : 1;
+            }
+            if (!File.Exists(logPath) || File.GetLastWriteTimeUtc(logPath) <= before) return 1;
+            output = File.ReadAllText(logPath);
+            log.Info("setup: setup-sshd.ps1 (elevated) -> " + (output.Contains("SETUP OK") ? "ok" : "failed"));
+            return output.Contains("SETUP OK") ? 0 : 1;
+        }
 
         public PeerInfo RequestInfo(Config cfg)
         {

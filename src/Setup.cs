@@ -40,9 +40,10 @@ namespace ScreenSwitch
         PeerInfo RequestInfo(Config cfg);
         // 重启与本程序同一目录的托盘程序
         TrayRestart RestartTray();
-        // 生成本机的 SSH 密钥对，返回公钥那一行；失败返回 null
+        // 生成 ~/.ssh/id_ed25519，返回公钥那一行；失败返回 null
         string GenerateKey();
-        // 把对方的公钥放行到本机（elevate 为真时以管理员身份做）：0 成功，其余为失败；output 是脚本的输出
+        // 把对方的公钥放行到本机（运行程序旁边的 setup-sshd.ps1）：0 成功；2 需要管理员而 elevate 为 false；
+        // 1223 用户在系统确认框里点了"否"；-1 setup-sshd.ps1 不在程序旁边；其余失败。output 是脚本的输出（弹确认框时为日志内容）
         int AuthorizePeerKey(string safeKey, bool elevate, out string output);
         // 当前进程是否以管理员身份运行
         bool IsAdmin();

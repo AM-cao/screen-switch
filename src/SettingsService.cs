@@ -236,5 +236,174 @@ namespace ScreenSwitch
             }
             catch (Exception e) { return Tr.T("err.autostart", e.Message); }
         }
+
+        // ---- 检测 ----
+
+        public DetectResult Probe(string mainModel)
+        {
+            return Detection.Choose(env.Monitors(), env.ConnectedCount(), mainModel);
+        }
+
+        public DetectResult Detect(string mainModel)
+        {
+            DetectResult r = Probe(mainModel);
+            if (r.Error != null) return r;
+            r.Error = Edit(delegate(Config c)
+            {
+                ApplyDetect(c, r);
+                return null;
+            });
+            if (r.Error == null) ClearDirectRecord();
+            return r;
+        }
+
+        public static void ApplyDetect(Config c, DetectResult r)
+        {
+            c.MainEdid = r.MainEdid;
+            c.SelfCode = r.SelfCode;
+            c.Layout = r.Layout;
+            if (c.PeerCode == c.SelfCode) c.PeerCode = 0;
+            c.Devices.RemoveAll(delegate(Device d) { return d.Code == c.SelfCode; });
+        }
+
+        // 重新设置后清掉"直接切换从未成功"的记录（design.md 5.2），让托盘程序重新试
+        void ClearDirectRecord()
+        {
+            try { File.Delete(Path.Combine(Dir, "direct-take.txt")); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+
+        // ---- 接口 ----
+
+        public PortsResult ReadPorts(Config c)
+        {
+            List<uint> codes = env.InputCodes(c.MainEdid);
+            var r = new PortsResult();
+            r.MonitorKnown = codes != null;
+            r.Rows = Ports.Build(codes, c);
+            return r;
+        }
+
+        // ---- 配对 ----
+
+        public PeerTestResult TestPeer()
+        {
+            string err;
+            Config c = Load(out err);
+            var r = new PeerTestResult();
+            if (err != null) { r.Error = err; return r; }
+            r = TestPeerWith(c);
+            if (r.Error == null && r.Code != 0 && r.Code != c.SelfCode && r.Code != c.PeerCode)
+            {
+                uint code = r.Code;
+                r.CodeSaved = Edit(delegate(Config x) { x.PeerCode = code; return null; }) == null;
+            }
+            else if (r.Error == null && r.Code != 0 && r.Code == c.PeerCode) r.CodeSaved = true;
+            return r;
+        }
+
+        public PeerTestResult TestPeerWith(Config c)
+        {
+            var r = new PeerTestResult();
+            if (!c.PeerConfigured) { r.Error = Tr.T("peer.err.none"); return r; }
+            PeerInfo info = env.RequestInfo(c);
+            if (info == null) { r.Error = Tr.T("peer.err.unreachable", c.PeerName); return r; }
+            r.Name = info.Name; r.Code = info.Code;
+            return r;
+        }
+
+        public string PublicKey()
+        {
+            string k = env.PublicKey();
+            if (k == null) k = env.GenerateKey();
+            return Setup.SafeKey(k);
+        }
+
+        public string Authorize(string key, bool elevate, out string output)
+        {
+            output = "";
+            string safe = Setup.SafeKey(key);
+            if (safe == null) return Tr.T("auth.err.key");
+            int rc = env.AuthorizePeerKey(safe, elevate, out output);
+            if (rc == 0) return null;
+            if (rc == 2) return Tr.T("auth.need-admin", "powershell -ExecutionPolicy Bypass -File \"" + Path.Combine(Dir, "setup-sshd.ps1") + "\" -PeerPubKey \"" + safe + "\"");
+            if (rc == 1223) return Tr.T("auth.err.cancelled");
+            if (rc == -1) return Tr.T("auth.err.missing");
+            return Tr.T("auth.err.failed", rc);
+        }
+
+        // ---- 向导 ----
+
+        public string SaveWizard(Config c, bool autostartOn)
+        {
+            try { c.Save(ConfigPath); }
+            catch (Exception e) { return e.Message; }
+            ClearDirectRecord();
+            string err = SetAutostart(autostartOn);
+            if (Reload != null) Reload();
+            return err;
+        }
+
+        // ---- 状态 ----
+
+        public Dictionary<string, object> Status()
+        {
+            string err;
+            Config c = Load(out err);
+            Prefs p = Prefs.Load(PrefsPath);
+            bool owned; long ts;
+            bool running = StateFile.ReadState(Dir, out owned, out ts) && StateFile.Now() - ts <= 10;
+            bool configured = err == null && c.MainEdid != Config.Placeholder && c.SelfCode != 0;
+            var problems = new List<string>();
+            if (err != null) problems.Add(err);
+            else if (!configured) problems.Add(Tr.T("problem.not-configured"));
+            if (!running) problems.Add(Tr.T("problem.tray-not-running"));
+            if (configured && c.PeerConfigured && c.PeerCode == 0) problems.Add(Tr.T("problem.peer-code-unknown", c.PeerName));
+
+            var peer = new Dictionary<string, object>();
+            peer["configured"] = c.PeerConfigured;
+            peer["name"] = c.PeerName; peer["os"] = c.PeerOs; peer["host"] = c.PeerHost; peer["user"] = c.PeerUser;
+            peer["code"] = (int)c.PeerCode;
+            var devices = new List<Dictionary<string, object>>();
+            foreach (Device dv in c.Devices)
+            {
+                var x = new Dictionary<string, object>();
+                x["name"] = dv.Name; x["code"] = (int)dv.Code; x["hotkey"] = dv.Hotkey ?? "";
+                devices.Add(x);
+            }
+            var self = new Dictionary<string, object>();
+            self["name"] = c.SelfName; self["code"] = (int)c.SelfCode;
+
+            var st = new Dictionary<string, object>();
+            st["configured"] = configured;
+            st["mainScreen"] = c.MainEdid;
+            st["self"] = self;
+            st["layout"] = c.Layout;
+            st["ownedLayout"] = p.OwnedLayout == OwnedLayout.MainOnly ? "main-only" : "extend";
+            st["autoSave"] = p.AutoSaveLayout;
+            st["directTake"] = c.DirectTake;
+            st["peer"] = peer;
+            st["devices"] = devices;
+            st["trayRunning"] = running;
+            st["owned"] = running ? (object)owned : null;
+            st["autostart"] = AutostartEnabled;
+            st["problems"] = problems;
+            return st;
+        }
+    }
+
+    public class PortsResult
+    {
+        public bool MonitorKnown;
+        public List<PortRow> Rows = new List<PortRow>();
+    }
+
+    public class PeerTestResult
+    {
+        public string Error;
+        public string Name = "";
+        public uint Code;
+        public bool CodeSaved;
     }
 }

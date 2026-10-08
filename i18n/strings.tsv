@@ -23,3 +23,17 @@ err.hotkey.taken	{0} 已经用于“{1}”。	{0} is already used for "{1}".
 hotkey.target.peer	切给对方 / 拿回主屏	Switch to the other computer / take back
 err.autostart	开机自动运行没能设置：{0}	Could not change start at login: {0}
 peer.ssh.manual	程序旁边没有 setup-client.ps1，请在仓库目录里手动运行：powershell -ExecutionPolicy Bypass -File setup-client.ps1 -PeerUser {0} -PeerHost {1}	setup-client.ps1 is not next to the program; run it by hand in the repository folder: powershell -ExecutionPolicy Bypass -File setup-client.ps1 -PeerUser {0} -PeerHost {1}
+detect.err.no-ddc	没有显示器应答 DDC/CI。可能的原因：显示器菜单里没有打开 DDC/CI；连接线、扩展坞或转接头不传 DDC；主屏此刻没在显示这台电脑（把主屏切到这台电脑后再试）。	No display answers DDC/CI. Possible causes: DDC/CI is off in the monitor's own menu; the cable, dock or adapter does not pass DDC; the main screen is not showing this computer right now (switch it to this computer and try again).
+detect.err.three	这台电脑接了 {0} 块屏，三块及以上的屏不支持：只留主屏，或主屏加另一块屏。	This computer has {0} screens; three or more are not supported. Keep only the main screen, or the main screen plus one more.
+detect.err.choose	有几块显示器应答 DDC/CI，请指定哪一块是主屏。	Several displays answer DDC/CI; choose which one is the main screen.
+detect.err.no-match	没有找到型号为 {0} 且应答 DDC/CI 的显示器。	No display with model {0} answers DDC/CI.
+peer.err.none	还没有设置对方电脑。	The other computer is not set up yet.
+peer.err.unreachable	连不上 {0}：确认它开着、在同一个局域网、已经授权了这台电脑的公钥。	Cannot reach {0}: check it is on, on the same network, and has authorised this computer's key.
+auth.err.key	这不像一把 SSH 公钥（应以 ssh-ed25519 或 ssh-rsa 开头）。	This does not look like an SSH public key (it should start with ssh-ed25519 or ssh-rsa).
+auth.need-admin	授权需要管理员权限。请在管理员 PowerShell 里执行：{0}	Authorising needs administrator rights. Run this in an administrator PowerShell: {0}
+auth.err.cancelled	在系统确认框里取消了，没有授权。	Cancelled in the system prompt; nothing was authorised.
+auth.err.missing	程序旁边没有 setup-sshd.ps1，请重新运行 install.cmd。	setup-sshd.ps1 is not next to the program; run install.cmd again.
+auth.err.failed	授权没有成功（{0}），详情见 setup-sshd.log。	Authorising failed ({0}); see setup-sshd.log.
+problem.not-configured	还没有设置：请运行设置向导。	Not set up yet: run the setup wizard.
+problem.tray-not-running	托盘程序没在运行。	The tray app is not running.
+problem.peer-code-unknown	不知道 {0} 接在哪个输入口：在设置的“输入口”里标出来，或点“测试连接”。	It is not known which input {0} uses: mark it under Inputs in Settings, or click Test connection.

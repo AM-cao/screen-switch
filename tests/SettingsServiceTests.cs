@@ -226,5 +226,118 @@ namespace ScreenSwitch.Tests
             Assert.Eq("reload", StateFile.ReadAndDeleteCommand(d), "reload requested");
             Directory.Delete(d, true);
         }
-    }
+
+        public static void Test_Detect_WritesAndClearsDirectRecord()
+        {
+            string d = TempDir(); int r;
+            var env = new FakeSetupEnv();
+            env.Mons.Add(new SetupMonitor("\\\\?\\DISPLAY#ABC1234#5&1&0&UID1#{x}", "X", true, 0x0F));
+            env.Connected = 1;
+            var s = Make(d, env, out r);
+            File.WriteAllText(Path.Combine(d, "direct-take.txt"), "miss 3");
+            DetectResult res = s.Detect(null);
+            Assert.Eq(null, res.Error, "ok");
+            Config c = Config.Load(Path.Combine(d, "config.json"));
+            Assert.Eq("ABC1234", c.MainEdid, "main");
+            Assert.Eq((uint)15, c.SelfCode, "own code");
+            Assert.Eq((uint)0, c.PeerCode, "peer had the same code: cleared");
+            Assert.Eq("none", c.Layout, "one screen");
+            Assert.Eq(false, File.Exists(Path.Combine(d, "direct-take.txt")), "record cleared");
+            Directory.Delete(d, true);
+        }
+
+        public static void Test_Ports_KnownAndUnknown()
+        {
+            string d = TempDir(); int r;
+            var env = new FakeSetupEnv();
+            var s = Make(d, env, out r);
+            string err;
+            Config c = s.Load(out err);
+            PortsResult p = s.ReadPorts(c);
+            Assert.Eq(false, p.MonitorKnown, "capabilities unreadable");
+            Assert.Eq(3, p.Rows.Count, "registered ports only");
+            env.Caps = new List<uint> { 15, 16, 17, 18 };
+            p = s.ReadPorts(c);
+            Assert.Eq(true, p.MonitorKnown, "readable");
+            Assert.Eq(4, p.Rows.Count, "all four");
+            Directory.Delete(d, true);
+        }
+
+        public static void Test_TestPeer_SavesCode()
+        {
+            string d = TempDir(); int r;
+            var env = new FakeSetupEnv();
+            var s = Make(d, env, out r);
+            Assert.Eq(null, s.ClearPeer(), "clear first");
+            PeerTestResult t = s.TestPeer();
+            Assert.True(t.Error != null, "no peer");
+            string ssh;
+            s.SetPeer("", "mac", "other.local", "alice", out ssh);
+            t = s.TestPeer();
+            Assert.True(t.Error != null && t.Error.Contains("Mac"), "unreachable names the peer: " + t.Error);
+            env.Info = new PeerInfo(); env.Info.Code = 15; env.Info.Name = "MacBook";
+            t = s.TestPeer();
+            Assert.Eq(null, t.Error, "reached");
+            Assert.Eq("MacBook", t.Name, "name");
+            Assert.Eq(true, t.CodeSaved, "code saved");
+            Assert.Eq((uint)15, Config.Load(Path.Combine(d, "config.json")).PeerCode, "in config");
+            Directory.Delete(d, true);
+        }
+
+        public static void Test_PublicKey_GeneratedWhenMissing()
+        {
+            string d = TempDir(); int r;
+            var env = new FakeSetupEnv(); env.Key = null; env.Generated = "ssh-ed25519 AAAAGEN me@pc";
+            var s = Make(d, env, out r);
+            Assert.Eq("ssh-ed25519 AAAAGEN me@pc", s.PublicKey(), "generated");
+            Assert.True(env.Calls.Contains("keygen"), "keygen ran");
+            Directory.Delete(d, true);
+        }
+
+        public static void Test_Authorize_AdminElevateAndRefusals()
+        {
+            string d = TempDir(); int r;
+            var env = new FakeSetupEnv();
+            var s = Make(d, env, out r);
+            string output;
+            Assert.True(s.Authorize("not a key", false, out output) != null, "bad key");
+            string err = s.Authorize("ssh-ed25519 AAAAPEER mac@book", false, out output);
+            Assert.True(err != null && err.Contains("-PeerPubKey \"ssh-ed25519 AAAAPEER mac@book\""), "not admin: prints the command: " + err);
+            Assert.Eq(null, s.Authorize("ssh-ed25519 AAAAPEER mac@book", true, out output), "elevated");
+            env.AuthRc = 1223;
+            Assert.True(s.Authorize("ssh-ed25519 AAAAPEER mac@book", true, out output) != null, "cancelled");
+            Directory.Delete(d, true);
+        }
+
+        public static void Test_SaveWizard_WritesEverything()
+        {
+            string d = TempDir(); int r;
+            var s = Make(d, new FakeSetupEnv(), out r);
+            File.WriteAllText(Path.Combine(d, "direct-take.txt"), "miss 3");
+            var c = new Config(); c.MainEdid = "ABC1234"; c.SelfCode = 16; c.Devices.Add(new Device("PS5", 18));
+            Assert.Eq(null, s.SaveWizard(c, true), "saved");
+            Assert.Eq("PS5", Config.Load(Path.Combine(d, "config.json")).Devices[0].Name, "config written");
+            Assert.Eq(true, s.AutostartEnabled, "autostart on");
+            Assert.Eq(false, File.Exists(Path.Combine(d, "direct-take.txt")), "record cleared");
+            Assert.Eq(1, ReloadCounter(), "reloaded");
+            Directory.Delete(d, true);
+        }
+
+        public static void Test_Status_FieldsAndProblems()
+        {
+            string d = TempDir(); int r;
+            var s = Make(d, new FakeSetupEnv(), out r);
+            Dictionary<string, object> st = s.Status();
+            Assert.Eq(true, st["configured"], "configured");
+            Assert.Eq("LHC9059", st["mainScreen"], "main");
+            Assert.Eq(false, st["trayRunning"], "tray not running");
+            var problems = (List<string>)st["problems"];
+            Assert.True(problems.Contains(Tr.T("problem.tray-not-running")), "tray problem listed");
+            var peer = (Dictionary<string, object>)st["peer"];
+            Assert.Eq("MacBook", peer["name"], "peer name");
+            Assert.Eq(15, peer["code"], "peer code as number");
+            var devices = (List<Dictionary<string, object>>)st["devices"];
+            Assert.Eq("Switch", devices[0]["name"], "device");
+            Directory.Delete(d, true);
+        }    }
 }
