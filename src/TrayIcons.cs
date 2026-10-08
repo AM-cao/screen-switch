@@ -59,7 +59,7 @@ namespace ScreenSwitch
             return bmp;
         }
 
-        // 返回的 Icon 与进程同生命周期，只创建两个，不回收句柄。
+        // 返回的 Icon 与进程同生命周期，只创建四个（占有与否 × 有无问题），不回收句柄。
         public static Icon Make(bool owned, int size) { return Make(owned, size, false); }
 
         public static Icon Make(bool owned, int size, bool problem)

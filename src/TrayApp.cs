@@ -91,11 +91,11 @@ namespace ScreenSwitch
             icon.BalloonTipIcon = ToolTipIcon.None;
             icon.ContextMenuStrip = menu;
             icon.Visible = true;
+            // 先登记快捷键：菜单和图标上的问题提示要用到登记结果
+            RegisterHotkeys();
             RebuildMenu();
 
             if (cfg.LoadError != null) Notify("配置文件有误，已使用默认值", cfg.LoadError);
-
-            RegisterHotkeys();
 
             timer = new System.Windows.Forms.Timer();
             timer.Interval = 500;
@@ -205,18 +205,21 @@ namespace ScreenSwitch
         void RunBg(Action a)
         {
             if (Interlocked.CompareExchange(ref busy, 1, 0) != 0) { Notify(Tr.T("notify.busy"), Tr.T("notify.busy.text")); return; }
+            // 开始：切换项马上变灰（RunBg 在界面线程上调用）
+            if (UiAlive()) RebuildMenu();
             ThreadPool.QueueUserWorkItem(delegate
             {
-                try
-                {
-                    a();
-                    if (UiAlive()) form.BeginInvoke(new Action(RebuildMenu));
-                }
+                try { a(); }
                 catch (Exception e) { log.Error("action: " + e); Notify(Tr.T("notify.failed"), e.Message); }
                 finally
                 {
                     Interlocked.Exchange(ref busy, 0);
-                    if (UiAlive()) form.BeginInvoke(new Action(delegate { if (Thread.VolatileRead(ref busy) == 0 && reloadGate.OnIdle()) ReloadEngine(); }));
+                    // 结束：busy 清零之后再重画菜单，然后才看有没有推迟的重新加载
+                    if (UiAlive()) form.BeginInvoke(new Action(delegate
+                    {
+                        RebuildMenu();
+                        if (Thread.VolatileRead(ref busy) == 0 && reloadGate.OnIdle()) ReloadEngine();
+                    }));
                 }
             });
         }
@@ -284,7 +287,7 @@ namespace ScreenSwitch
             try { Process.Start(Path.Combine(dir, "screenswitch.log")); }
             catch (Exception e) { Notify(Tr.T("notify.log-failed"), e.Message); }
         }
-        public IList<string> HotkeyProblems { get { return hotkeyProblems; } }
+        public IList<string> HotkeyProblems { get { return new List<string>(hotkeyProblems); } }
 
         // 首次启动向导在下一个任务里实现；先打开设置窗口的"通用"页
         void OpenWizard() { OpenSettings(SettingsForm.TabGeneral); }
