@@ -149,7 +149,13 @@ namespace ScreenSwitch
                 uint code = Ui.AskCode(this, Tr.T("ports.add.prompt"));
                 if (code != 0) table.AddPort(code);
             }));
-            table.Changed += delegate { Done(svc.SetPorts(table.GetRows()), TabPorts); };
+            table.Changed += delegate
+            {
+                string err = svc.SetPorts(table.GetRows());
+                Done(err, TabPorts);
+                // 设备可能增删改名：快捷键页的设备行跟着变（不读显示器，只重读配置）
+                if (err == null) Later(delegate { RebuildTab(TabHotkeys); });
+            };
             PortsResult result = null;
             Background(table, delegate { result = svc.ReadPorts(c); }, delegate
             {
@@ -173,7 +179,7 @@ namespace ScreenSwitch
                 if (r.Error != null) { Ui.Error(status, r.Error); return; }
                 Ui.Ok(status, "");
                 // 主屏或输入口变了：这两页重读（等当前处理完再画）
-                Later(delegate { RebuildTab(TabPorts); RebuildTab(TabScreens); });
+                Later(delegate { RebuildTab(TabPorts); RebuildTab(TabScreens); RebuildTab(TabHotkeys); });
             });
         }
 
@@ -238,7 +244,7 @@ namespace ScreenSwitch
             {
                 string err = svc.ClearPeer();
                 Done(err, TabPeer);
-                // 对方的地址和输入口都清掉了：这两页重画
+                // 对方的地址和输入口都清掉了：这两页重画（快捷键页只列设备和对方，对方的快捷键行不变）
                 if (err == null) Later(delegate { RebuildTab(TabPeer); RebuildTab(TabPorts); });
             }));
             return col;
