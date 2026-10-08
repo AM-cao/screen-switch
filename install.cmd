@@ -32,5 +32,5 @@ if not exist "%DEST%\config.json" (
 powershell -NoProfile -Command "$s=(New-Object -ComObject WScript.Shell).CreateShortcut([Environment]::GetFolderPath('Startup')+'\ScreenSwitch.lnk');$s.TargetPath='%DEST%\ScreenSwitch.exe';$s.WorkingDirectory='%DEST%';$s.Save()"
 start "" "%DEST%\ScreenSwitch.exe"
 echo installed to %DEST%
-echo next: run "%DEST%\ScreenSwitchCli.exe" setup
-echo       (it asks a few questions and writes config.json). See README-windows.md.
+echo next: the setup wizard opens on first start (or run "%DEST%\ScreenSwitchCli.exe" setup)
+echo       See README-windows.md, or let an AI assistant follow AGENTS.md.
