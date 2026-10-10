@@ -89,6 +89,7 @@ namespace ScreenSwitch
 
         internal Config Work { get { return work; } }
         internal PeerPanel Peer { get { return peerPanel; } }
+        internal DateTime Stamp { get { return configStamp; } }
 
         public WizardForm(SettingsService svc)
         {
@@ -137,6 +138,14 @@ namespace ScreenSwitch
         // 不重新检测、不重读输入口（重读会丢掉输入口表里没提交的改动）。
         public void Relanguage()
         {
+            // 换语言就是刚才写了 config.json：工作配置跟上文件里的语言，并记下新的文件时间，
+            // 免得点"完成"时问"被修改过"、选"是"又把旧语言写回去
+            Config disk = Config.Load(svc.ConfigPath);
+            if (disk.LoadError == null)
+            {
+                work.UiLanguage = disk.UiLanguage;
+                configStamp = WizardLogic.ConfigStamp(svc.ConfigPath);
+            }
             Control[] old = (Control[])pages.Clone();
             PeerPanel oldPeer = peerPanel;
             List<PortRow> rows = portTable.GetRows();

@@ -57,7 +57,10 @@ namespace ScreenSwitch
                         string[] values;
                         if (key == "after-take") values = new string[] { Join(args, 2) };
                         else { values = new string[args.Length - 2]; Array.Copy(args, 2, values, 0, values.Length); }
-                        return Done(o, s.SetOption(key, values));
+                        string err = s.SetOption(key, values);
+                        // 换了界面语言：这条命令的"已完成。"就用新语言
+                        if (err == null && key == "language") Tr.Apply(values[0]);
+                        return Done(o, err);
                     }
                 case "autostart":
                     if (args.Length != 2 || (args[1] != "on" && args[1] != "off")) return Usage(o, "autostart on|off");

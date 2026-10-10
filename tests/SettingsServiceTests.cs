@@ -422,6 +422,21 @@ namespace ScreenSwitch.Tests
             Directory.Delete(d, true);
         }
 
+        // 向导写配置时界面语言用文件里现在的（向导开着时可能改过），不用向导打开时的
+        public static void Test_SaveWizard_KeepsLanguageOnDisk()
+        {
+            string d = TempDir(); int r;
+            var s = Make(d, new FakeSetupEnv(), out r);
+            Config work = Saved(d);
+            Assert.Eq("auto", work.UiLanguage, "wizard opened with auto");
+            Assert.Eq(null, s.SetOption("language", new string[] { "en" }), "changed meanwhile");
+            work.SelfName = "from wizard";
+            Assert.Eq(null, s.SaveWizard(work, false), "saved");
+            Assert.Eq("en", Saved(d).UiLanguage, "language on disk kept");
+            Assert.Eq("from wizard", Saved(d).SelfName, "wizard's settings written");
+            Directory.Delete(d, true);
+        }
+
         // status 的 language 紧跟在 directTake 后面（字典的插入顺序就是 JSON 的顺序）
         public static void Test_Status_LanguageAfterDirectTake()
         {

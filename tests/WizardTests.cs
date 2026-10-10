@@ -91,6 +91,31 @@ namespace ScreenSwitch.Tests
             System.IO.Directory.Delete(d, true);
         }
 
+        // 换语言（已写入 config.json）后：工作配置跟上文件里的语言，文件时间重新记下，点"完成"时不误问"被修改过"
+        public static void Test_Form_Relanguage_TakesLanguageAndStampFromDisk()
+        {
+            string d = SettingsServiceTests.TempDir();
+            int r;
+            var s = SettingsServiceTests.Make(d, new FakeSetupEnv(), out r);
+            string p = System.IO.Path.Combine(d, "config.json");
+            System.IO.File.SetLastWriteTimeUtc(p, new System.DateTime(2026, 1, 1, 0, 0, 0, System.DateTimeKind.Utc));
+            try
+            {
+                using (var f = new WizardForm(s))
+                {
+                    System.DateTime before = f.Stamp;
+                    Assert.Eq(null, s.SetOption("language", new string[] { "en" }), "language changed in the settings window");
+                    Assert.True(WizardLogic.ConfigStamp(p) != before, "file changed");
+                    Tr.Use("en");
+                    f.Relanguage();
+                    Assert.Eq("en", f.Work.UiLanguage, "work follows the file");
+                    Assert.Eq(WizardLogic.ConfigStamp(p), f.Stamp, "stamp refreshed: no overwrite question");
+                }
+            }
+            finally { Tr.Use("zh"); }
+            System.IO.Directory.Delete(d, true);
+        }
+
         // 向导打开期间 config.json 被改过：点"完成"前要能看出来（不在、写过、又写过都算变了）
         // 主屏页点列表：按那一行记下的设备路径，越界和不应答 DDC/CI 的行不理会
         public static void Test_PickedMonitor_ByRowId()

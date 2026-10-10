@@ -352,9 +352,14 @@ namespace ScreenSwitch
             written = false;
             try
             {
-                // 现有的 config.json 读不了：先留一份 config.json.bak（盖掉旧的 .bak），再写新的
-                if (File.Exists(ConfigPath) && Config.Load(ConfigPath).LoadError != null)
-                    File.Copy(ConfigPath, ConfigPath + ".bak", true);
+                if (File.Exists(ConfigPath))
+                {
+                    Config old = Config.Load(ConfigPath);
+                    // 现有的 config.json 读不了：先留一份 config.json.bak（盖掉旧的 .bak），再写新的
+                    if (old.LoadError != null) File.Copy(ConfigPath, ConfigPath + ".bak", true);
+                    // 界面语言不归向导管：向导开着时可能在设置窗口或命令行里改过，用文件里现在的
+                    else c.UiLanguage = old.UiLanguage;
+                }
                 c.Save(ConfigPath);
             }
             catch (Exception e) { return e.Message; }
