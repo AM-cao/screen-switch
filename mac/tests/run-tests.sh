@@ -213,6 +213,21 @@ $S give peer >/dev/null; wait_for 5 '[ "$(cat $FAKE_DIR/layout)" = mirror ]' >/d
 notified "无法保存排列：当前是镜像" && ok "镜像时拒绝保存" || bad "mirror save: $(cat $SCREENCTL_NOTIFY_FILE)"
 stop_daemon; $S set AUTO_SAVE_LAYOUT 1 >/dev/null
 
+echo "== 屏幕休眠时 displayplacer 给出 enabled:false：不保存，坏配置也不套用"
+echo 15 > $FAKE_DIR/input; echo extend > $FAKE_DIR/layout; start_daemon
+wait_for 5 '[ "$(owned)" = owned=1 ]' >/dev/null
+echo 'displayplacer "id:11111111-2222-3333-4444-555555555555 enabled:false" "id:AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE enabled:false"' > $FAKE_DIR/extend_line
+sleep 6; grep -q "enabled:false" $SCREENCTL_DIR/config.sh && bad "休眠时的排列被自动保存" || ok "休眠时的排列不自动保存"
+stop_daemon
+cp $SCREENCTL_DIR/config.sh $FAKE_DIR/config.good
+sed -i '' "s/^    'id:AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE res:[^']*'/    'id:AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE enabled:false'/" $SCREENCTL_DIR/config.sh
+grep -q "EEEEEEEEEEEE enabled:false'" $SCREENCTL_DIR/config.sh || bad "测试没改出坏配置"
+echo 16 > $FAKE_DIR/input; echo mirror > $FAKE_DIR/layout; rm -f $FAKE_DIR/extend_line $FAKE_DIR/dp.log; start_daemon
+echo 15 > $FAKE_DIR/input
+wait_for 8 'grep -q "排列不完整" $SCREENCTL_DIR/screenctl.log' >/dev/null && ok "坏配置拒绝套用并记日志" || bad "bad config applied"
+grep -q "enabled:false" $FAKE_DIR/dp.log 2>/dev/null && bad "坏排列传给了 displayplacer" || ok "坏排列没传给 displayplacer"
+stop_daemon; cp $FAKE_DIR/config.good $SCREENCTL_DIR/config.sh
+
 echo "== 仅大屏（关闭笔记本屏）"
 lay() { cat $FAKE_DIR/layout; }
 laptop() { [ -f $FAKE_DIR/laptop_off ] && echo off || echo on; }

@@ -535,6 +535,11 @@ apply_layout() {
         LAYOUT_ERR=$(t mac.err.noExtendLayout)
         return 1
     fi
+    # 配置里的排列坏了（如屏幕休眠时被记下的 enabled:false）就不要套用：套用会把主屏关掉，切过来没有画面
+    if [ "$want" = mirror ]; then layout_args_ok "${MIRROR_ARGS[@]}"; else layout_args_ok "${EXTEND_ARGS[@]}"; fi || {
+        LAYOUT_ERR=$(t mac.err.layoutIncomplete)
+        return 1
+    }
     laptop_set enable || return 1
     case "$want" in
         mirror) "$DISPLAYPLACER" "${MIRROR_ARGS[@]}" >> "$LOG" 2>&1 ;;
@@ -1530,11 +1535,23 @@ read_current_layout() {
         case "$v" in "id:$SECOND_ID "*) a=$v ;; esac
     done
     [ -n "$a" ] || { CUR_ERR=$(t mac.err.noSecond); return 1; }
+    layout_args_ok "${CUR_EXT[@]}" || { CUR_ERR=$(t mac.err.layoutIncomplete); return 1; }
     res=$(printf '%s\n' "$a" | grep -o 'res:[0-9]*x[0-9]*')
     hz=$(printf '%s\n' "$a" | grep -o 'hz:[0-9]*')
     depth=$(printf '%s\n' "$a" | grep -o 'color_depth:[0-9]*')
     scaling=$(printf '%s\n' "$a" | grep -o 'scaling:o[nf]*')
     CUR_MIR=("id:$SECOND_ID+$MAIN_ID $res $hz $depth $scaling origin:(0,0) degree:0")
+}
+
+# 排列参数是否完整：每块屏都有分辨率且没被关闭。屏幕休眠或重新配置的瞬间 displayplacer list
+# 会给出 "id:… enabled:false"，这种排列既不能保存也不能套用
+layout_args_ok() {
+    local v
+    [ $# -gt 0 ] || return 1
+    for v in "$@"; do
+        case "$v" in *enabled:false*) return 1 ;; esac
+        case "$v" in *res:[0-9]*x[0-9]*) ;; *) return 1 ;; esac
+    done
 }
 
 # 排列签名：参数排序后拼接，用于比对是否变化

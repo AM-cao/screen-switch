@@ -334,6 +334,7 @@ mac.notify.peerDidNotReturn	{0} 没有交还主屏。{1}	{0} didn't hand back th
 mac.err.mirrored	当前是镜像	The displays are mirrored
 mac.err.mainAbsent	当前拓扑里没有主屏	The main screen isn't connected right now
 mac.err.noSecond	当前排列里没有另一块屏	The other screen isn't in the current arrangement
+mac.err.layoutIncomplete	屏幕排列不完整（有屏幕关着或在休眠）	The screen arrangement is incomplete (a screen is off or asleep)
 mac.notify.saveFailed	无法保存排列：{0}	Couldn't save the arrangement: {0}
 mac.notify.autoSaved	已自动记住新的屏幕排列	Remembered the new screen arrangement
 mac.notify.saved	已记住当前屏幕排列	Remembered the current screen arrangement
