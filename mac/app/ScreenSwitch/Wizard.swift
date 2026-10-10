@@ -117,6 +117,9 @@ struct MainPageState {
 }
 
 final class WizardWindowController: NSWindowController, NSWindowDelegate {
+    // 两张表的对象要留住：界面里的控件只弱引用它们
+    var portsEditor: PortsEditor?
+    var peerEditor: PeerEditor?
     static var current: WizardWindowController?
 
     var draft: WizardDraft
@@ -388,6 +391,7 @@ final class WizardWindowController: NSWindowController, NSWindowDelegate {
             return views
         }
         let editor = PortsEditor(ports: draft.ports.map { $0.port }, peerName: draft.peerName)
+        portsEditor = editor
         editor.window = window
         editor.onChange = { [weak self, weak editor] _, _ in
             guard let self = self, let e = editor else { return }
@@ -410,6 +414,7 @@ final class WizardWindowController: NSWindowController, NSWindowDelegate {
 
     func peerPage() -> [NSView] {
         let editor = PeerEditor(fields: draft.peer, inWizard: true)
+        peerEditor = editor
         editor.window = window
         editor.onFieldsChanged = { [weak self] f in
             guard let self = self else { return }

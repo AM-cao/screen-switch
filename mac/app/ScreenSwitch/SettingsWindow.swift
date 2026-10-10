@@ -33,6 +33,9 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     static var current: SettingsWindowController?
 
     let tabView = NSTabView()
+    // 两张表的对象要留住：界面里的控件只弱引用它们，不留住的话改了也没反应
+    var portsEditor: PortsEditor?
+    var peerEditor: PeerEditor?
     var data = SettingsData()
     var containers: [SettingsTab: NSView] = [:]
     var extraPorts: Set<Int> = []        // 本次手动添加、还没登记用途的口（重读配置时不丢）
@@ -169,6 +172,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         }
         ports.sort { $0.code < $1.code }
         let editor = PortsEditor(ports: ports, peerName: data.status.peerConfigured ? data.status.peerName : "")
+        portsEditor = editor
         editor.window = window
         editor.onAdd = { [weak self] c in self?.extraPorts.insert(c) }
         editor.onChange = { [weak self] old, new in self?.applyPort(old, new) }
@@ -199,6 +203,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         let fields = PeerFields(name: s.peerHost.isEmpty ? "" : s.peerName, os: s.peerOS.isEmpty ? "windows" : s.peerOS,
                                 host: s.peerHost, user: s.peerUser)
         let editor = PeerEditor(fields: fields, inWizard: false)
+        peerEditor = editor
         editor.window = window
         editor.onFieldsChanged = { [weak self] f in
             guard f.complete else { return }
