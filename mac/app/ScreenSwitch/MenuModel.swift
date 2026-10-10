@@ -34,9 +34,9 @@ enum Problem: Equatable {
 
     var text: String {
         switch self {
-        case .notConfigured: return L("menu.problem.notConfigured")
-        case .daemonDown: return L("menu.problem.daemonDown")
-        case .hotkeyFailed(_, let combo): return L("menu.problem.hotkey", combo)
+        case .notConfigured: return L("problem.not-configured")
+        case .daemonDown: return L("mac.menu.problem.daemonDown")
+        case .hotkeyFailed(_, let combo): return L("problem.hotkey", combo)
         case .notificationsOff: return L("mac.menu.problem.notifications")
         }
     }
@@ -78,8 +78,8 @@ func buildMenuEntries(own: Ownership, busy: Bool, info: MenuInfo, problems: [Pro
     e.append(.separator)
     if info.configured {
         // 第一项随状态变；守护进程没在运行时不知道归属，两项都给
-        let peerItem = MenuEntry(title: L("menu.switchTo", info.peer), action: .give(["peer"]), enabled: !busy)
-        let takeItem = MenuEntry(title: L("menu.takeBack"), action: .give(["self"]), enabled: !busy)
+        let peerItem = MenuEntry(title: L("menu.give-to", info.peer), action: .give(["peer"]), enabled: !busy)
+        let takeItem = MenuEntry(title: L("menu.take-back"), action: .give(["self"]), enabled: !busy)
         switch own {
         case .owned:
             if !info.peer.isEmpty { var i = peerItem; i.hotkey = hotkeys[.peer]; e.append(i) }
@@ -90,7 +90,7 @@ func buildMenuEntries(own: Ownership, busy: Bool, info: MenuInfo, problems: [Pro
             if !info.peer.isEmpty { e.append(peerItem) }
         }
         for d in info.devices {
-            e.append(MenuEntry(title: L("menu.switchTo", d.name), action: .give(["code", "\(d.code)"]),
+            e.append(MenuEntry(title: L("menu.give-to", d.name), action: .give(["code", "\(d.code)"]),
                                enabled: !busy, hotkey: hotkeys[.device(d.code)]))
         }
         e.append(.separator)
@@ -98,7 +98,7 @@ func buildMenuEntries(own: Ownership, busy: Bool, info: MenuInfo, problems: [Pro
         if info.layout != "none" && info.secondBuiltin {
             let mainOnly = info.ownedLayout == "external"
             e.append(MenuEntry(title: L("menu.extend"), action: .setLayout("extend"), checked: !mainOnly))
-            e.append(MenuEntry(title: L("menu.mainOnly"), action: .setLayout("main-only"), checked: mainOnly))
+            e.append(MenuEntry(title: L("menu.main-only"), action: .setLayout("main-only"), checked: mainOnly))
             e.append(.separator)
         }
     }

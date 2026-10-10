@@ -34,7 +34,7 @@ enum Strings {
     static func has(_ key: String) -> Bool { table[key] != nil }
 }
 
-// L("menu.switchTo", "Switch")：取当前语言的文字，{0} {1}… 换成参数，\n 换成换行；表里没有时返回编号本身
+// L("menu.give-to", "Switch")：取当前语言的文字，{0} {1}… 换成参数，\n 换成换行；表里没有时返回编号本身
 func L(_ key: String, _ args: String...) -> String {
     guard let row = Strings.table[key] else { return key }
     var s = Strings.isChinese ? row.zh : row.en

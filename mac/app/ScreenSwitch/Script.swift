@@ -127,7 +127,7 @@ struct Status {
         mainScreen = j["mainScreen"] as? String ?? ""
         let me = j["self"] as? [String: Any] ?? [:]
         selfName = me["name"] as? String ?? ""
-        selfCode = me["code"] as? Int
+        selfCode = (me["code"] as? Int).flatMap { $0 > 0 ? $0 : nil }   // 0 = 不知道
         layout = j["layout"] as? String ?? "second"
         ownedLayout = j["ownedLayout"] as? String ?? "extend"
         autoSave = j["autoSave"] as? Bool ?? true
@@ -138,7 +138,7 @@ struct Status {
         peerOS = p["os"] as? String ?? ""
         peerHost = p["host"] as? String ?? ""
         peerUser = p["user"] as? String ?? ""
-        peerCode = p["code"] as? Int
+        peerCode = (p["code"] as? Int).flatMap { $0 > 0 ? $0 : nil }
         devices = (j["devices"] as? [[String: Any]] ?? []).compactMap { d in
             guard let c = d["code"] as? Int else { return nil }
             return Device(code: c, name: d["name"] as? String ?? "", hotkey: d["hotkey"] as? String ?? "")
@@ -166,7 +166,7 @@ struct Port: Equatable {
 
     // "DisplayPort 1（15）"；没有标准名时"编码 27"
     var title: String {
-        name.isEmpty ? L("ports.code", "\(code)") : L("ports.named", name, "\(code)")
+        name.isEmpty ? L("mac.ports.code", "\(code)") : L("port.label", name, "\(code)")
     }
 
     static func standardName(_ code: Int) -> String {

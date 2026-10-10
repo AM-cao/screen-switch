@@ -149,7 +149,7 @@ t() {
 
 # 命令成功的最后一行（docs/settings-ui-design.md 第 7 节）
 say_done() {
-    echo "$(t cli.done)"
+    echo "$(t cmd.ok)"
 }
 
 # 软件切不回来时提示用户的话（主屏停在别的设备上时，只有显示器按钮能切回来）
@@ -1715,7 +1715,7 @@ read_input_caps() {
 # 不指定 --main 时：只有一块显示器能用软件控制就用它；几块都能控制时退出码 1，列出候选，要带 --main 重跑。
 # 对方电脑、设备、快捷键等已有的设置原样保留。旧写法 init [显示器名] 同样走这里
 cmd_detect() {
-    local want="" name uuid line n=0 cands=""
+    local want="" name uuid line n=0 cands="" id
     while [ $# -gt 0 ]; do
         case "$1" in
             --main) [ $# -ge 2 ] || die "$(t mac.usage.detect)"; want=$2; shift 2 ;;
@@ -1725,6 +1725,8 @@ cmd_detect() {
     done
     detect_preflight
     if [ -n "$want" ]; then
+        # 型号、uuid，或同型号有两块时候选里列出的"型号#uuid"
+        case "$want" in *#*) want=${want##*#} ;; esac
         line=$(m1ddc_externals | awk -F'\t' -v w="$want" '$1 == w || toupper($2) == toupper(w) { print; exit }')
         [ -n "$line" ] || die "$(t mac.err.monitorNotFound "$want")"
         name=${line%%	*}; uuid=${line#*	}
@@ -1740,8 +1742,13 @@ cmd_detect() {
         if [ $n -gt 1 ]; then
             {
                 echo "error: $(t mac.err.manyMonitors)"
+                t cmd.detect.candidates; echo
+                # 标识是型号；同型号有两块时写成"型号#uuid"，--main 给这个写法正好对上一块
                 printf '%s' "$cands" | while IFS='	' read -r name uuid; do
-                    [ -n "$uuid" ] && echo "  $name  $(display_name_of "$uuid" "$name")"
+                    [ -n "$uuid" ] || continue
+                    id=$name
+                    [ "$(printf '%s' "$cands" | cut -f1 | grep -cxF -- "$name")" -gt 1 ] && id="$name#$uuid"
+                    echo "  $id  $(display_name_of "$uuid" "$name")"
                 done
             } >&2
             exit 1
@@ -1866,6 +1873,11 @@ json_num() {
     if is_int "$1" && [ -n "$1" ]; then printf '%s' "$((10#${1#-}))"; else printf null; fi
 }
 
+# 输入口编码：和 Windows 一样不知道时写 0
+json_code() {
+    if is_int "$1" && [ -n "$1" ]; then printf '%s' "$((10#${1#-}))"; else printf 0; fi
+}
+
 json_bool() {
     if [ "$1" = 1 ]; then printf true; else printf false; fi
 }
@@ -1896,12 +1908,36 @@ list_problems() {
         return 0
     fi
     daemon_alive || echo daemon-not-running
+    peer_configured && [ -z "$CODE_PEER" ] && echo peer-code-unknown
     if menu_alive; then
         [ -f "$SCREENCTL_DIR/menu.problems" ] && grep -v '^$' "$SCREENCTL_DIR/menu.problems"
     else
         echo menu-not-running
     fi
     return 0
+}
+
+# status 的 problems 和 Windows 一样输出给人看的说明（按界面语言），标识只在 menu.problems 里用
+problem_text() {
+    local i=0 e combo=""
+    case "$1" in
+        not-configured) t problem.not-configured ;;
+        daemon-not-running) t mac.menu.problem.daemonDown ;;
+        menu-not-running) t mac.problem.menuDown ;;
+        notifications-off) t mac.menu.problem.notifications ;;
+        peer-code-unknown) t problem.peer-code-unknown "$PEER_NAME" ;;
+        hotkey-failed:*)
+            if [ "${1#hotkey-failed:}" = peer ]; then
+                combo=$HOTKEY_PEER
+            else
+                for e in "${DEVICES[@]}"; do
+                    [ "${e##*=}" = "${1#hotkey-failed:}" ] && combo=${HOTKEY_DEVICES[$i]}
+                    i=$((i + 1))
+                done
+            fi
+            t problem.hotkey "${combo:-${1#hotkey-failed:}}" ;;
+        *) printf '%s\n' "$1" ;;
+    esac
 }
 
 cmd_status() {
@@ -1914,9 +1950,9 @@ cmd_status() {
     out="{\"configured\":$(if configured; then echo true; else echo false; fi)"
     out="$out,\"mainScreen\":$(json_str "$(configured && printf '%s' "$MAIN_NAME")")"
     if configured; then
-        out="$out,\"self\":{\"name\":$(json_str "$(self_name)"),\"code\":$(json_num "$CODE_SELF")}"
+        out="$out,\"self\":{\"name\":$(json_str "$(self_name)"),\"code\":$(json_code "$CODE_SELF")}"
     else
-        out="$out,\"self\":{\"name\":$(json_str "$(self_name)"),\"code\":null}"
+        out="$out,\"self\":{\"name\":$(json_str "$(self_name)"),\"code\":0}"
     fi
     out="$out,\"layout\":$(json_str "$LAYOUT")"
     if [ "$(want_layout)" = external ]; then out="$out,\"ownedLayout\":\"main-only\""; else out="$out,\"ownedLayout\":\"extend\""; fi
@@ -1926,18 +1962,18 @@ cmd_status() {
     else
         out="$out,\"peer\":{\"configured\":false,\"name\":$(json_str "$( [ -n "$PEER_HOST" ] && printf '%s' "$PEER_NAME")"),\"os\":$(json_str "$( [ -n "$PEER_HOST" ] && printf '%s' "$PEER_OS")")"
     fi
-    out="$out,\"host\":$(json_str "$PEER_HOST"),\"user\":$(json_str "$PEER_USER"),\"code\":$(json_num "$CODE_PEER")}"
+    out="$out,\"host\":$(json_str "$PEER_HOST"),\"user\":$(json_str "$PEER_USER"),\"code\":$(json_code "$CODE_PEER")}"
     out="$out,\"devices\":["
     for e in "${DEVICES[@]}"; do
         [ $i -gt 0 ] && out="$out,"
-        out="$out{\"name\":$(json_str "${e%=*}"),\"code\":$(json_num "${e##*=}"),\"hotkey\":$(json_str "${HOTKEY_DEVICES[$i]}")}"
+        out="$out{\"name\":$(json_str "${e%=*}"),\"code\":$(json_code "${e##*=}"),\"hotkey\":$(json_str "${HOTKEY_DEVICES[$i]}")}"
         i=$((i + 1))
     done
     out="$out],\"trayRunning\":$(json_bool $running),\"owned\":$own"
     out="$out,\"autostart\":$(if autostart_on; then echo true; else echo false; fi)"
     while IFS= read -r p; do
         [ -n "$p" ] || continue
-        probs="$probs${probs:+,}$(json_str "$p")"
+        probs="$probs${probs:+,}$(json_str "$(problem_text "$p")")"
     done < <(list_problems)
     echo "$out,\"problems\":[$probs]}"
 }
@@ -2077,7 +2113,7 @@ cmd_peer() {
             done
             case "$os" in windows|mac) ;; *) die "$(t mac.usage.peer)" ;; esac
             [ -n "$host" ] && [ -n "$user" ] || die "$(t mac.usage.peer)"
-            [ -z "$host" ] || [ "${host#-}" = "$host" ] || die "$(t mac.usage.peer)"
+            check_peer_addr "$host" "$user"
             load_config
             old_default=$(default_peer_prog "$PEER_OS" "$PEER_USER")
             # 没改过程序路径（或系统、用户名变了）时按新的系统和用户名重新生成
@@ -2118,7 +2154,8 @@ cmd_peer() {
                     shift 2
                 done
                 case "$os" in windows|mac) ;; *) die "$(t mac.usage.peer)" ;; esac
-                [ -n "$host" ] && [ -n "$user" ] && [ "${host#-}" = "$host" ] || die "$(t mac.usage.peer)"
+                [ -n "$host" ] && [ -n "$user" ] || die "$(t mac.usage.peer)"
+                check_peer_addr "$host" "$user"
                 PEER_OS=$os; PEER_HOST=$host; PEER_USER=$user; PEER_PROG=$(default_peer_prog "$os" "$user")
                 PEER_NAME=${name:-$host}
                 TEST_ONLY=1
@@ -2134,7 +2171,7 @@ cmd_peer() {
                 n=true
                 reload_daemon
             fi
-            echo "{\"name\":$(json_str "$INFO_NAME"),\"code\":$(json_num "$INFO_CODE"),\"codeSaved\":$n}" ;;
+            echo "{\"name\":$(json_str "$INFO_NAME"),\"code\":$(json_code "$INFO_CODE"),\"codeSaved\":$n}" ;;
         code)
             [ $# -eq 1 ] || die "$(t mac.usage.peer)"
             load_config
@@ -2207,7 +2244,7 @@ cmd_device() {
     say_done
 }
 
-# 快捷键的写法：修饰键（ctrl、opt/alt/option、shift、cmd/command/win）至少一个，加一个数字或字母，用 + 连接；
+# 快捷键的写法：修饰键（ctrl、opt/alt/option、cmd/command/win 至少一个，可以再加 shift），加一个数字或字母，用 + 连接；
 # 不分大小写。规范成 ctrl+opt+shift+cmd+<键> 的顺序放进 HOTKEY；写法不对返回 1
 norm_hotkey() {
     local spec key m mods="" c=0 o=0 s=0 k=0 part
@@ -2230,8 +2267,15 @@ norm_hotkey() {
     [ $o = 1 ] && mods="${mods}opt+"
     [ $s = 1 ] && mods="${mods}shift+"
     [ $k = 1 ] && mods="${mods}cmd+"
-    [ -n "$mods" ] || return 1
+    # 只带 Shift 不行：要有 Control、Option 或 Command
+    [ $c = 1 ] || [ $o = 1 ] || [ $k = 1 ] || return 1
     HOTKEY="$mods$key"
+}
+
+# 对方的地址和用户名（与 Windows 相同的规则）：不能以 - 开头，免得被 ssh 当成选项
+check_peer_addr() {
+    case "$1" in ""|-*|*[!A-Za-z0-9._-]*) die "$(t err.peer.host)" ;; esac
+    case "$2" in ""|-*|*[[:space:]\'\"@:/\\\;\&\|\<\>\`\$\(\)]*) die "$(t err.peer.user)" ;; esac
 }
 
 # 这个组合键是否已经给了别的动作（$2 = 本动作：peer 或设备编码）

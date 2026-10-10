@@ -28,7 +28,7 @@ final class PortsEditor {
 
     func render() {
         view.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        let header = hstack([label(L("ports.header.port"), bold: true, width: 190), label(L("ports.header.use"), bold: true)])
+        let header = hstack([label(L("mac.ports.header.port"), bold: true, width: 190), label(L("mac.ports.header.use"), bold: true)])
         (header.arrangedSubviews[0] as? NSTextField)?.widthAnchor.constraint(equalToConstant: 190).isActive = true
         view.addArrangedSubview(header)
         for (i, p) in ports.enumerated() { view.addArrangedSubview(row(i, p)) }
@@ -39,14 +39,14 @@ final class PortsEditor {
         let name = label(p.title)
         name.widthAnchor.constraint(equalToConstant: 190).isActive = true
         if p.use == "self" {
-            let popup = PopUp([L("ports.use.self")], selected: 0) { _ in }
+            let popup = PopUp([L("port.use.self")], selected: 0) { _ in }
             popup.isEnabled = false
             return hstack([name, popup])
         }
-        let titles = [peerName.isEmpty ? L("ports.use.peer") : L("ports.use.peerNamed", peerName),
-                      L("ports.use.device"), L("ports.use.none")]
+        let titles = [peerName.isEmpty ? L("port.use.peer") : L("mac.ports.use.peerNamed", peerName),
+                      L("port.use.device"), L("port.use.none")]
         let selected = Self.uses.firstIndex(of: p.use) ?? 2
-        let field = TextBox(p.device, placeholder: L("ports.deviceName"), width: 170) { [weak self] v in
+        let field = TextBox(p.device, placeholder: L("mac.ports.deviceName"), width: 170) { [weak self] v in
             self?.deviceNamed(i, v)
         }
         field.isHidden = p.use != "device"
@@ -88,10 +88,10 @@ final class PortsEditor {
     private var pendingFrom: [Int: Port] = [:]
 
     private func askAdd() {
-        promptText(L("ports.addPrompt"), in: window) { [weak self] text in
+        promptText(L("ports.add.prompt"), in: window) { [weak self] text in
             guard let self = self, let t = text, !t.isEmpty else { return }
-            guard let c = Int(t), (1...255).contains(c) else { showError(L("ports.badCode", t), in: self.window); return }
-            guard !self.ports.contains(where: { $0.code == c }) else { showError(L("ports.exists", t), in: self.window); return }
+            guard let c = Int(t), (1...255).contains(c) else { showError(L("mac.ports.badCode", t), in: self.window); return }
+            guard !self.ports.contains(where: { $0.code == c }) else { showError(L("mac.ports.exists", t), in: self.window); return }
             self.ports.append(Port(code: c, name: Port.standardName(c), use: "none", device: "", fromMonitor: false))
             self.ports.sort { $0.code < $1.code }
             self.onAdd?(c)
@@ -104,8 +104,8 @@ final class PortsEditor {
         var names = Set<String>()
         for p in ports where p.use == "device" {
             let n = p.device.trimmingCharacters(in: .whitespaces)
-            if n.isEmpty { return L("ports.needName", p.title) }
-            if names.contains(n) { return L("ports.dupName", n) }
+            if n.isEmpty { return L("ports.err.name", p.title) }
+            if names.contains(n) { return L("mac.ports.dupName", n) }
             names.insert(n)
         }
         return nil
@@ -158,7 +158,7 @@ final class PeerEditor {
 
     private func fieldRow(_ title: String, _ control: NSView, _ note: String = "") -> NSView {
         let l = label(title)
-        l.widthAnchor.constraint(equalToConstant: 90).isActive = true
+        l.widthAnchor.constraint(equalToConstant: 175).isActive = true
         var views: [NSView] = [l, control]
         if !note.isEmpty { views.append(label(note, small: true, secondary: true)) }
         return hstack(views)
@@ -178,17 +178,17 @@ final class PeerEditor {
 
         view.addArrangedSubview(fieldRow(L("peer.name"), nameBox))
         view.addArrangedSubview(fieldRow(L("peer.os"), osPopup))
-        view.addArrangedSubview(fieldRow(L("peer.host"), hostBox, L("peer.hostHint")))
+        view.addArrangedSubview(fieldRow(L("peer.host"), hostBox))
         view.addArrangedSubview(fieldRow(L("peer.user"), userBox))
         if !inWizard {
-            incompleteHint.stringValue = L("peer.incomplete")
+            incompleteHint.stringValue = L("mac.peer.incomplete")
             incompleteHint.isHidden = fields.complete || fields.empty
             view.addArrangedSubview(incompleteHint)
         }
         view.addArrangedSubview(separatorLine())
 
         // 这台电脑的公钥：没有就生成
-        view.addArrangedSubview(label(L("peer.selfKey"), bold: true))
+        view.addArrangedSubview(label(L("mac.peer.selfKey"), bold: true))
         let pub = Script.run(["pubkey"])
         let key = pub.ok ? pub.output.trimmingCharacters(in: .whitespacesAndNewlines) : pub.message
         keyLabel.stringValue = key
@@ -200,7 +200,7 @@ final class PeerEditor {
         }
         copy.isEnabled = pub.ok
         view.addArrangedSubview(hstack([keyLabel, copy]))
-        view.addArrangedSubview(helpText(L("peer.selfKeyHelp")))
+        view.addArrangedSubview(helpText(L("mac.peer.selfKeyHelp")))
 
         // 对方公钥 + 授权
         let peerKey = NSTextField()
@@ -220,7 +220,7 @@ final class PeerEditor {
             }
             self.authResult.isHidden = false
         }
-        view.addArrangedSubview(label(L("peer.peerKey"), bold: true))
+        view.addArrangedSubview(label(L("peer.theirkey"), bold: true))
         view.addArrangedSubview(hstack([peerKey, authorize]))
         authResult.isHidden = true
         openSharing.isHidden = true
@@ -233,7 +233,7 @@ final class PeerEditor {
         test.onClick = { [weak self, weak test] in
             guard let self = self else { return }
             self.view.window?.makeFirstResponder(nil)   // 正在编辑的文字框先生效
-            guard self.fields.complete else { self.showTest(L("peer.needHost"), warn: true); return }
+            guard self.fields.complete else { self.showTest(L("mac.peer.needHost"), warn: true); return }
             test?.isEnabled = false
             self.showTest(L("peer.testing"), warn: false)
             self.onTest? { text, warn in
@@ -271,13 +271,13 @@ final class PeerEditor {
     static func describeTest(_ r: ScriptResult, expected: Int?) -> (String, Bool, Int?) {
         guard let j = Script.json(r) else { return (r.message, true, nil) }
         let name = j["name"] as? String ?? ""
-        guard let code = j["code"] as? Int else { return (L("peer.testOkNoCode", name), false, nil) }
+        guard let code = j["code"] as? Int, code > 0 else { return (L("peer.reached-nocode", name), false, nil) }
         let port = Port(code: code, name: Port.standardName(code), use: "peer", device: "", fromMonitor: false).title
-        var text = L("peer.testOk", name, port)
+        var text = L("peer.reached", name, port)
         var warn = false
         if let e = expected, e != code {
             let was = Port(code: e, name: Port.standardName(e), use: "peer", device: "", fromMonitor: false).title
-            text += "\n" + L("peer.testMismatch", was, port)
+            text += "\n" + L("mac.peer.testMismatch", was, port)
             warn = true
         }
         return (text, warn, code)

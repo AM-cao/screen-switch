@@ -180,7 +180,7 @@ func promptText(_ message: String, in window: NSWindow?, _ done: @escaping (Stri
     let a = NSAlert()
     a.messageText = message
     a.addButton(withTitle: L("common.ok"))
-    a.addButton(withTitle: L("common.cancel"))
+    a.addButton(withTitle: L("wizard.cancel"))
     let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 200, height: 24))
     a.accessoryView = field
     a.window.initialFirstResponder = field

@@ -1,6 +1,6 @@
 // 全局快捷键：Carbon RegisterEventHotKey（公开 API，无需辅助功能权限）。默认一个都不注册，
 // 只有用户在设置里给"切给对方 / 拿回主屏"或某个设备设了才注册（docs/settings-ui-design.md 第 3、5 节）。
-// 写法与命令层相同：ctrl/opt/shift/cmd 至少一个，加一个数字或字母，用 + 连接，如 ctrl+opt+1。
+// 写法与命令层相同：ctrl/opt/cmd 至少一个（可以再加 shift），加一个数字或字母，用 + 连接，如 ctrl+opt+1。
 
 import AppKit
 import Carbon.HIToolbox
@@ -39,6 +39,7 @@ struct HotKey: Equatable {
             default: return nil
             }
         }
+        guard !flags.intersection([.control, .option, .command]).isEmpty else { return nil }   // 只带 Shift 不行
         return make(key: key, keyCode: UInt32(code), flags: flags, carbon: carbon)
     }
 
@@ -56,7 +57,7 @@ struct HotKey: Equatable {
     static func from(event: NSEvent) -> HotKey? {
         guard let key = keyCodes.first(where: { $0.value == Int(event.keyCode) })?.key else { return nil }
         let flags = event.modifierFlags.intersection([.control, .option, .shift, .command])
-        guard !flags.isEmpty else { return nil }
+        guard !flags.intersection([.control, .option, .command]).isEmpty else { return nil }   // 只带 Shift 不行
         var carbon: UInt32 = 0
         if flags.contains(.control) { carbon |= UInt32(controlKey) }
         if flags.contains(.option) { carbon |= UInt32(optionKey) }
@@ -196,8 +197,8 @@ final class HotKeyRecorder: NSButton {
     override var acceptsFirstResponder: Bool { true }
 
     private func refreshTitle() {
-        if recording { title = L("hotkeys.recording") }
-        else if spec.isEmpty { title = L("hotkeys.placeholder") }
+        if recording { title = L("mac.hotkeys.recording") }
+        else if spec.isEmpty { title = L("mac.hotkeys.placeholder") }
         else { title = HotKey.displayText(spec) }
     }
 

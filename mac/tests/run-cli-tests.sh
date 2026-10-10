@@ -32,8 +32,8 @@ expect_error() { [ $RC -eq 1 ] && [ "$(printf '%s\n' "$OUT" | wc -l | tr -d ' ')
 echo "== 还没设置过"
 fresh blank
 run $S status
-[ $RC -eq 0 ] && [ "$(json "$OUT" 'j["configured"], j["self"]["code"], j["mainScreen"], j["problems"], j["owned"], j["trayRunning"]')" = "(False, None, '', ['not-configured'], None, False)" ] \
-  && ok "status：configured=false，本机编码 null，problems=[not-configured]" || bad "status blank: rc=$RC $OUT"
+[ $RC -eq 0 ] && [ "$(json "$OUT" 'j["configured"], j["self"]["code"], j["mainScreen"], j["problems"], j["owned"], j["trayRunning"]')" = "(False, 0, '', ['还没有设置：请运行设置向导。'], None, False)" ] \
+  && ok "status：configured=false，本机编码 0，problems 是“还没有设置”的说明" || bad "status blank: rc=$RC $OUT"
 [ "$(json "$OUT" 'sorted(j.keys())')" = "['autoSave', 'autostart', 'configured', 'devices', 'directTake', 'layout', 'mainScreen', 'owned', 'ownedLayout', 'peer', 'problems', 'self', 'trayRunning']" ] \
   && [ "$(json "$OUT" 'sorted(j["peer"].keys()), sorted(j["self"].keys())')" = "(['code', 'configured', 'host', 'name', 'os', 'user'], ['code', 'name'])" ] \
   && ok "status 的字段与规范一致" || bad "status keys: $(json "$OUT" 'sorted(j.keys())')"
@@ -61,7 +61,7 @@ C | grep -q "^MAIN_NAME='P275MV'" && C | grep -q "^CODE_SELF=15" && C | grep -q 
 run $S status
 [ "$(json "$OUT" 'j["configured"], j["mainScreen"], j["self"]["code"], j["layout"], j["ownedLayout"], j["autoSave"], j["directTake"], j["peer"]["configured"], j["devices"]')" \
   = "(True, 'P275MV', 15, 'second', 'extend', True, True, False, [])" ] && ok "status：设置过，主屏 P275MV，本机 15，扩展" || bad "status after detect: $OUT"
-json "$OUT" 'j["problems"]' | grep -q "daemon-not-running" && ok "problems 里有 daemon-not-running" || bad "problems: $(json "$OUT" 'j["problems"]')"
+json "$OUT" 'j["problems"]' | grep -q "后台程序没在运行" && ok "problems 里有“后台程序没在运行”" || bad "problems: $(json "$OUT" 'j["problems"]')"
 run $S ports
 [ "$(json "$OUT" 'j["monitorKnown"], [(p["code"], p["use"]) for p in j["ports"]]')" = "(True, [(15, 'self'), (16, 'none'), (17, 'none'), (18, 'none')])" ] \
   && ok "ports：清单来自配置" || bad "ports: $OUT"
@@ -76,6 +76,14 @@ echo ext > $FAKE_DIR/topology; touch $FAKE_DIR/all_inputs
 run $S detect
 [ $RC -eq 1 ] && [ "$(printf '%s\n' "$OUT" | head -1 | cut -c1-7)" = "error: " ] && printf '%s\n' "$OUT" | grep -qx "  P275MV  P275MV" && printf '%s\n' "$OUT" | grep -qx "  SIDE24  SIDE 24" \
   && ok "两块都能控制：退出码 1，列出候选（型号  名字）" || bad "many: rc=$RC [$OUT]"
+touch $FAKE_DIR/twin
+run $S detect
+[ $RC -eq 1 ] && printf '%s\n' "$OUT" | grep -q "^  P275MV#AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE  " && printf '%s\n' "$OUT" | grep -q "^  P275MV#EEEEEEEE-FFFF-0000-1111-222222222222  " \
+  && ok "两块同型号：候选写成 型号#uuid" || bad "twin: rc=$RC [$OUT]"
+run $S detect --main 'P275MV#EEEEEEEE-FFFF-0000-1111-222222222222'
+expect_done "--main 型号#uuid"
+C | grep -q "^MAIN_UUID='EEEEEEEE-FFFF-0000-1111-222222222222'" && ok "选中的是第二块同型号屏" || bad "twin pick: $(C | grep '^MAIN_UUID')"
+rm -f $FAKE_DIR/twin
 run $S detect --main SIDE24
 expect_done "带 --main 重跑"
 C | grep -q "^MAIN_NAME='SIDE24'" && C | grep -q "^MAIN_PORTS=''" && ok "换了显示器：清单作废（这块读不出）" || bad "switch monitor: $(C | grep '^MAIN_NAME\|^MAIN_PORTS' | tr '\n' ' ')"
@@ -98,8 +106,12 @@ run $S peer set --os linux --host x --user y
 expect_error "系统写错：error" "peer set"
 run $S peer set --os mac --host mini.local
 expect_error "缺用户名：error" "peer set"
+run $S peer set --os mac --host -oProxyCommand=x --user amy
+expect_error "地址以 - 开头：error" "地址"
+run $S peer set --os mac --host mini.local --user -x
+expect_error "用户名以 - 开头：error" "用户名"
 run $S status
-[ "$(json "$OUT" 'j["peer"]')" = "{'configured': True, 'name': '书房 mini', 'os': 'mac', 'host': 'mini.local', 'user': 'amy', 'code': None}" ] \
+[ "$(json "$OUT" 'j["peer"]')" = "{'configured': True, 'name': '书房 mini', 'os': 'mac', 'host': 'mini.local', 'user': 'amy', 'code': 0}" ] \
   && ok "status.peer" || bad "status peer: $(json "$OUT" 'j["peer"]')"
 export FAKE_SSH_OUT="proto=3 os=mac code=16 name=$(printf %s mini | base64) devices="
 run $S peer test
@@ -173,6 +185,8 @@ expect_done "device remove"
 sed -n '/^HOTKEY_DEVICES=(/,/^)/p' $SCREENCTL_DIR/config.sh | grep -q "'shift+cmd+p'" && run $S status \
   && [ "$(json "$OUT" '[(d["code"], d["hotkey"]) for d in j["devices"]]')" = "[(18, 'shift+cmd+p'), (27, '')]" ] \
   && ok "删掉设备后，其余设备的快捷键仍对得上" || bad "hotkeys after remove: $(json "$OUT" 'j["devices"]')"
+run $S set hotkey peer shift+1
+expect_error "只带 Shift 的快捷键：error" "shift+1"
 run $S set hotkey peer none
 C | grep -q "^HOTKEY_PEER=''" && ok "set hotkey peer none 清除" || bad "hotkey none"
 $S menu-info | grep -qx "device=18	客厅 PS5	shift+cmd+p" && ok "menu-info 给菜单栏程序的设备和快捷键" || bad "menu-info: $($S menu-info | tr '\n' '|')"
@@ -222,7 +236,7 @@ echo "== 清除对方电脑"
 run $S peer clear
 expect_done "peer clear"
 run $S status
-[ "$(json "$OUT" 'j["peer"]')" = "{'configured': False, 'name': '', 'os': '', 'host': '', 'user': '', 'code': None}" ] && ok "对方的设置都清空" || bad "peer clear: $(json "$OUT" 'j["peer"]')"
+[ "$(json "$OUT" 'j["peer"]')" = "{'configured': False, 'name': '', 'os': '', 'host': '', 'user': '', 'code': 0}" ] && ok "对方的设置都清空" || bad "peer clear: $(json "$OUT" 'j["peer"]')"
 run $S peer test
 expect_error "没有对方时 peer test：error" "对方电脑"
 
@@ -239,13 +253,14 @@ export SCREENSWITCH_LANG=zh
 
 echo "== 状态与问题"
 echo "owned=1 $(date +%s)" > $SCREENCTL_DIR/state; echo $$ > $SCREENCTL_DIR/watch.pid
+$S set hotkey peer ctrl+opt+1 >/dev/null
 printf 'hotkey-failed:peer\nnotifications-off\n' > $SCREENCTL_DIR/menu.problems; echo $$ > $SCREENCTL_DIR/menu.pid
 run $S status
-[ "$(json "$OUT" 'j["trayRunning"], j["owned"], j["problems"]')" = "(True, True, ['hotkey-failed:peer', 'notifications-off'])" ] \
+[ "$(json "$OUT" 'j["trayRunning"], j["owned"], j["problems"]')" = "(True, True, ['快捷键 ctrl+opt+1 没能注册（可能被别的程序占用）', '通知没有打开'])" ] \
   && ok "守护进程在跑：trayRunning、owned；菜单栏程序报的问题" || bad "status running: $OUT"
 rm -f $SCREENCTL_DIR/menu.pid
 run $S status
-[ "$(json "$OUT" 'j["problems"]')" = "['menu-not-running']" ] && ok "菜单栏程序没在运行：menu-not-running，不再用它留下的问题" || bad "menu down: $(json "$OUT" 'j["problems"]')"
+[ "$(json "$OUT" 'j["problems"]')" = "['菜单栏程序没在运行']" ] && ok "菜单栏程序没在运行，不再用它留下的问题" || bad "menu down: $(json "$OUT" 'j["problems"]')"
 rm -f $SCREENCTL_DIR/state $SCREENCTL_DIR/watch.pid $SCREENCTL_DIR/menu.problems
 
 echo; echo "PASS=$pass FAIL=$fail"

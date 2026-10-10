@@ -96,7 +96,7 @@ struct MainPageState {
 
     // 停在这一页的原因；nil = 可以下一步
     var blocker: String? {
-        if scan.failed { return L("wizard.main.scanFailed") }
+        if scan.failed { return L("mac.wizard.main.scanFailed") }
         if scan.lidClosed { return L("mac.wizard.lidClosed") }
         if controllable.isEmpty { return L("mac.err.noMonitor") }
         guard chosen != nil else { return L("wizard.main.pick") }
@@ -108,10 +108,10 @@ struct MainPageState {
         guard let c = chosen else { return [] }
         var n: [String] = []
         if let code = c.code {
-            n.append(L("wizard.main.selfPort", Port(code: code, name: Port.standardName(code), use: "self", device: "", fromMonitor: true).title))
+            n.append(L("wizard.main.self", Port(code: code, name: Port.standardName(code), use: "self", device: "", fromMonitor: true).title))
         }
-        if others.isEmpty { n.append(L("wizard.main.noSecond")) }
-        else if others.count == 1 { n.append(L("wizard.main.second", others[0].title)) }
+        if others.isEmpty { n.append(L("wizard.main.only")) }
+        else if others.count == 1 { n.append(L("wizard.main.other", others[0].title)) }
         return n
     }
 }
@@ -214,7 +214,7 @@ final class WizardWindowController: NSWindowController, NSWindowDelegate {
 
     func render() {
         titleLabel.stringValue = page.title
-        stepLabel.stringValue = L("wizard.step", "\(page.rawValue + 1)", "\(WizardPage.allCases.count)")
+        stepLabel.stringValue = L("mac.wizard.step", "\(page.rawValue + 1)", "\(WizardPage.allCases.count)")
         backButton.isHidden = page == .welcome
         skipButton.isHidden = page != .peer
         nextButton.title = page == .done ? L("wizard.finish") : L("wizard.next")
@@ -245,7 +245,7 @@ final class WizardWindowController: NSWindowController, NSWindowDelegate {
             if let e = PortsEditor.validate(draft.ports.map { $0.port }) { pageError = e; render(); return }
         case .peer:
             let f = draft.peer
-            if !f.empty && !f.complete { pageError = L("peer.needHost"); render(); return }
+            if !f.empty && !f.complete { pageError = L("mac.peer.needHost"); render(); return }
         case .done:
             finish(); return
         default: break
@@ -279,7 +279,7 @@ final class WizardWindowController: NSWindowController, NSWindowDelegate {
     // ---- 1 欢迎
 
     func welcomePage() -> [NSView] {
-        [label(L("wizard.welcome.body"), wraps: true, width: 560),
+        [label(L("wizard.welcome.text"), wraps: true, width: 560),
          label(L("wizard.welcome.before"), bold: true, wraps: true, width: 560)]
     }
 
@@ -312,15 +312,15 @@ final class WizardWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func mainPage() -> [NSView] {
-        var views: [NSView] = [label(L("wizard.main.intro"), wraps: true, width: 560)]
-        let redetect = ActionButton(L("ports.redetect")) { [weak self] in self?.rescan() }
+        var views: [NSView] = [label(L("mac.wizard.main.intro"), wraps: true, width: 560)]
+        let redetect = ActionButton(L("ports.detect")) { [weak self] in self?.rescan() }
         guard let scan = scan, !scanning else {
-            views.append(hstack([label(L("ports.detecting"), secondary: true)]))
+            views.append(hstack([label(L("mac.ports.detecting"), secondary: true)]))
             return views
         }
         let state = MainPageState(scan: scan, selected: draft.mainUUID)
         for d in state.externals {
-            let text = d.title + "  —  " + (d.controllable ? L("wizard.main.controllable") : L("wizard.main.notControllable"))
+            let text = d.title + "  —  " + (d.controllable ? L("wizard.main.ddc-yes") : L("wizard.main.ddc-no"))
             let r = Radio(text, selected: d.uuid == draft.mainUUID) { [weak self] in self?.select(d.uuid) }
             r.isEnabled = d.controllable
             views.append(r)
@@ -382,9 +382,9 @@ final class WizardWindowController: NSWindowController, NSWindowDelegate {
     var monitorKnown = true
 
     func portsPage() -> [NSView] {
-        var views: [NSView] = [label(L("wizard.ports.intro"), wraps: true, width: 560)]
+        var views: [NSView] = [label(L("wizard.ports.text"), wraps: true, width: 560)]
         if loadingPorts {
-            views.append(label(L("wizard.ports.reading"), secondary: true))
+            views.append(label(L("ports.reading"), secondary: true))
             return views
         }
         let editor = PortsEditor(ports: draft.ports.map { $0.port }, peerName: draft.peerName)
@@ -401,8 +401,8 @@ final class WizardWindowController: NSWindowController, NSWindowDelegate {
             self.render()
         }
         views.append(editor.view)
-        if !monitorKnown { views.append(helpText(L("ports.unknownList"))) }
-        views.append(helpText(L("ports.help")))
+        if !monitorKnown { views.append(helpText(L("ports.unknown"))) }
+        views.append(helpText(L("mac.ports.help")))
         return views
     }
 
@@ -431,13 +431,13 @@ final class WizardWindowController: NSWindowController, NSWindowDelegate {
                         self.draft.ports.append(DraftPort(Port(code: c, name: Port.standardName(c), use: "peer", device: "", fromMonitor: false)))
                         self.draft.ports.sort { $0.code < $1.code }
                     }
-                    if expected == nil { t += "\n" + L("wizard.peer.portMarked") }
+                    if expected == nil { t += "\n" + L("mac.wizard.peer.portMarked") }
                     self.draft.save()
                 }
                 done(t, warn)
             }
         }
-        return [label(L("wizard.peer.intro"), wraps: true, width: 560), editor.view]
+        return [label(L("wizard.peer.text"), wraps: true, width: 560), editor.view]
     }
 
     // ---- 5 完成
@@ -445,17 +445,17 @@ final class WizardWindowController: NSWindowController, NSWindowDelegate {
     func summary() -> [String] {
         var s: [String] = []
         let selfTitle = draft.selfCode.map { Port(code: $0, name: Port.standardName($0), use: "self", device: "", fromMonitor: true).title } ?? "?"
-        s.append(L("wizard.summary.main", draft.mainName, selfTitle))
+        s.append(L("mac.wizard.summary.main", draft.mainName, selfTitle))
         if draft.peer.complete {
             let name = draft.peerName.isEmpty ? (draft.peerOS == "mac" ? "Mac" : "Windows") : draft.peerName
             let port = draft.peerPort.map { Port(code: $0, name: Port.standardName($0), use: "peer", device: "", fromMonitor: true).title }
-                ?? L("wizard.summary.portUnknown")
-            s.append(L("wizard.summary.peer", name, "\(draft.peerUser)@\(draft.peerHost)", port))
+                ?? L("mac.wizard.summary.portUnknown")
+            s.append(L("mac.wizard.summary.peer", name, "\(draft.peerUser)@\(draft.peerHost)", port))
         } else {
-            s.append(L("wizard.summary.noPeer"))
+            s.append(L("mac.wizard.summary.noPeer"))
         }
         let devs = draft.devices.map { "\($0.device)（\($0.port.title)）" }
-        s.append(devs.isEmpty ? L("wizard.summary.noDevices") : L("wizard.summary.devices", devs.joined(separator: Strings.isChinese ? "、" : ", ")))
+        s.append(devs.isEmpty ? L("mac.wizard.summary.noDevices") : L("wizard.summary.devices", devs.joined(separator: Strings.isChinese ? "、" : ", ")))
         return s
     }
 
@@ -466,7 +466,7 @@ final class WizardWindowController: NSWindowController, NSWindowDelegate {
             self?.draft.autostart = on
             self?.draft.save()
         })
-        if finishing { views.append(label(L("wizard.finishing"), secondary: true)) }
+        if finishing { views.append(label(L("mac.wizard.finishing"), secondary: true)) }
         return views
     }
 
@@ -482,7 +482,7 @@ final class WizardWindowController: NSWindowController, NSWindowDelegate {
                 guard let self = self else { return }
                 self.finishing = false
                 if let f = failure {
-                    self.pageError = L("wizard.finishFailed", f.message)
+                    self.pageError = L("mac.wizard.finishFailed", f.message)
                     self.render()
                     return
                 }
@@ -497,7 +497,8 @@ final class WizardWindowController: NSWindowController, NSWindowDelegate {
 
     // 在后台线程运行；返回第一条失败的命令结果
     static func apply(_ d: WizardDraft) -> ScriptResult? {
-        let detect = Script.run(["detect", "--main", d.mainName])
+        // 按 uuid 指定：同型号的两块屏也分得开
+        let detect = Script.run(["detect", "--main", d.mainUUID.isEmpty ? d.mainName : d.mainUUID])
         if !detect.ok { return detect }
         let current = Status.load()
         let wanted = d.devices

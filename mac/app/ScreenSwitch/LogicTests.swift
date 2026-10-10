@@ -14,11 +14,11 @@ func runLogicTests() -> Bool {
 
     print("== 文字表")
     check(Strings.table.count > 100, "读到文字表（\(Strings.table.count) 行）")
-    let required = ["menu.takeBack", "menu.switchTo", "menu.extend", "menu.mainOnly", "menu.settings", "menu.quit",
+    let required = ["menu.take-back", "menu.give-to", "menu.extend", "menu.main-only", "menu.settings", "menu.quit",
                     "tab.ports", "tab.peer", "tab.screens", "tab.hotkeys", "tab.general", "wizard.title", "app.name"]
     let missing = required.filter { !Strings.has($0) }
     check(missing.isEmpty, "菜单、标签页、向导的编号都在（缺：\(missing)）")
-    check(L("menu.switchTo", "Switch") != "menu.switchTo" && L("menu.switchTo", "Switch").contains("Switch"), "占位 {0} 换成参数")
+    check(L("menu.give-to", "Switch") != "menu.give-to" && L("menu.give-to", "Switch").contains("Switch"), "占位 {0} 换成参数")
     check(L("no.such.key") == "no.such.key", "表里没有的编号原样返回")
 
     print("== 菜单")
@@ -26,8 +26,8 @@ func runLogicTests() -> Bool {
     info.peer = "Windows"
     info.devices = [Device(code: 17, name: "Switch", hotkey: "")]
     let zh = Strings.isChinese
-    let take = L("menu.takeBack"), toWin = L("menu.switchTo", "Windows"), toSwitch = L("menu.switchTo", "Switch")
-    let ext = L("menu.extend"), only = L("menu.mainOnly"), set = L("menu.settings"), quit = L("menu.quit")
+    let take = L("menu.take-back"), toWin = L("menu.give-to", "Windows"), toSwitch = L("menu.give-to", "Switch")
+    let ext = L("menu.extend"), only = L("menu.main-only"), set = L("menu.settings"), quit = L("menu.quit")
     var e = buildMenuEntries(own: .notOwned, busy: false, info: info, problems: [], hotkeys: [:])
     check(titles(e) == [take, toSwitch, "--", ext + " ✓", only, "--", set, quit], "主屏不在本机：拿回主屏 / 设备 / 布局 / 设置 / 退出（\(titles(e))）")
     e = buildMenuEntries(own: .owned, busy: false, info: info, problems: [], hotkeys: [:])
@@ -56,12 +56,12 @@ func runLogicTests() -> Bool {
     e = buildMenuEntries(own: .notOwned, busy: false, info: info, problems: [], hotkeys: [.peer: hk])
     check(e.first?.hotkey == hk && e[1].hotkey == nil, "只有设了快捷键的项才显示快捷键")
     e = buildMenuEntries(own: .daemonDown, busy: false, info: info, problems: [.daemonDown], hotkeys: [:])
-    check(titles(e).first == "⚠ " + L("menu.problem.daemonDown") && titles(e)[1] == "--" && titles(e)[2] == take && titles(e)[3] == toWin,
+    check(titles(e).first == "⚠ " + L("mac.menu.problem.daemonDown") && titles(e)[1] == "--" && titles(e)[2] == take && titles(e)[3] == toWin,
           "有问题：最上面一行 ⚠ 说明；守护进程没在运行时两个切换项都给（\(titles(e).prefix(4))）")
     check(e.first?.action == .problem(.daemonDown), "点 ⚠ 那一行打开对应位置")
     var blank = MenuInfo(); blank.configured = false
     e = buildMenuEntries(own: .daemonDown, busy: false, info: blank, problems: [.notConfigured], hotkeys: [:])
-    check(titles(e) == ["⚠ " + L("menu.problem.notConfigured"), "--", set, quit], "还没设置过：只有 ⚠、设置、退出")
+    check(titles(e) == ["⚠ " + L("problem.not-configured"), "--", set, quit], "还没设置过：只有 ⚠、设置、退出")
     check(!titles(buildMenuEntries(own: .owned, busy: false, info: info, problems: [], hotkeys: [:])).contains(where: { $0.hasPrefix("⚠") }),
           "没有问题时没有 ⚠ 那一行")
     check(Problem.hotkeyFailed(.device(17), "⌃⌥2").id == "hotkey-failed:17" && Problem.notificationsOff.id == "notifications-off",
@@ -70,6 +70,7 @@ func runLogicTests() -> Bool {
     print("== 快捷键写法")
     check(HotKey.parse("Ctrl+Alt+1")?.spec == "ctrl+opt+1" && HotKey.parse("ctrl+alt+1")?.display == "⌃⌥1", "Ctrl+Alt+1 → ctrl+opt+1，显示 ⌃⌥1")
     check(HotKey.parse("cmd+shift+p")?.spec == "shift+cmd+p" && HotKey.parse("cmd+shift+p")?.display == "⇧⌘P", "修饰键按固定顺序")
+    check(HotKey.parse("shift+1") == nil && HotKey.parse("1") == nil, "只带 Shift 或不带修饰键：不接受")
     check(HotKey.parse("x") == nil && HotKey.parse("ctrl+f1") == nil && HotKey.parse("hyper+1") == nil, "写法不对返回 nil")
 
     print("== 向导：主屏页")
@@ -81,7 +82,7 @@ func runLogicTests() -> Bool {
     check(MainPageState.autoSelect(scan, previous: "", previousName: "") == "A", "只有一块能控制：自动选中")
     var st = MainPageState(scan: scan, selected: "A")
     check(st.blocker == nil, "选中后可以下一步")
-    check(st.notes.count == 2 && st.notes[1] == L("wizard.main.second", "Built-in"), "说明本机接在哪个口、主屏切走时桌面放到哪块屏")
+    check(st.notes.count == 2 && st.notes[1] == L("wizard.main.other", "Built-in"), "说明本机接在哪个口、主屏切走时桌面放到哪块屏")
     scan.displays.insert(disp("SIDE24", "B", ctl: true, code: 15), at: 1)
     check(MainPageState.autoSelect(scan, previous: "", previousName: "") == "", "几块都能控制：不自动选，让用户点选")
     check(MainPageState.autoSelect(scan, previous: "", previousName: "SIDE24") == "B", "上次选过的（按名字）仍选中")
@@ -96,7 +97,7 @@ func runLogicTests() -> Bool {
     check(MainPageState(scan: scan, selected: "").blocker == L("mac.wizard.lidClosed"), "合着盖子：要求开盖")
     scan = DisplayScan(); scan.displays = [disp("P275MV", "A", ctl: true, code: 16)]
     st = MainPageState(scan: scan, selected: "A")
-    check(st.blocker == nil && st.notes.contains(L("wizard.main.noSecond")), "只有主屏：可以下一步，说明只有主屏")
+    check(st.blocker == nil && st.notes.contains(L("wizard.main.only")), "只有主屏：可以下一步，说明只有主屏")
 
     print("== 向导：输入口与对方")
     let ports = [Port(code: 15, name: "DisplayPort 1", use: "self", device: "", fromMonitor: true),
@@ -111,9 +112,9 @@ func runLogicTests() -> Bool {
           "peer set 的参数")
     let ok = ScriptResult(code: 0, output: "{\"name\":\"PC\",\"code\":16,\"codeSaved\":true}", error: "")
     var (text, warn, code) = PeerEditor.describeTest(ok, expected: 16)
-    check(!warn && code == 16 && text == L("peer.testOk", "PC", L("ports.named", "DisplayPort 2", "16")), "测试连接：已连上 X，它接在 Y")
+    check(!warn && code == 16 && text == L("peer.reached", "PC", L("port.label", "DisplayPort 2", "16")), "测试连接：已连上 X，它接在 Y")
     (text, warn, code) = PeerEditor.describeTest(ok, expected: 17)
-    check(warn && text.contains(L("ports.named", "HDMI 1", "17")), "与输入口页标的不一致时提醒")
+    check(warn && text.contains(L("port.label", "HDMI 1", "17")), "与输入口页标的不一致时提醒")
     (text, warn, _) = PeerEditor.describeTest(ScriptResult(code: 1, output: "", error: "error: 连不上 PC：timeout\n"), expected: nil)
     check(warn && text == "连不上 PC：timeout", "连不上时显示原因")
     check(ScriptResult(code: 1, output: "", error: "error: x\n  P275MV  P275MV\n  SIDE24  SIDE 24\n").candidates == ["P275MV", "SIDE24"],

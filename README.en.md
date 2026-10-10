@@ -122,7 +122,7 @@ Quit
 
 - When the monitor is showing this computer, the first item becomes "Switch to <other computer>" (missing if no other computer is set up). Then there is one "Switch to <device>" item per device.
 - The icon shows whether the main screen is on this computer: bright = yes, dimmed = no.
-- "Extend displays / Main screen only" is the layout after taking back; it isn't shown when there's only the main screen.
+- "Extend displays / Main screen only" is the layout after taking back; it isn't shown when there's only the main screen, or when the other screen is an external monitor (extend is the only option then).
 - When something needs your attention (a hotkey is taken, the background program isn't running…), the icon gets a small exclamation mark and a "⚠ …" line appears at the top of the menu; click it to open the right place in the settings.
 - No hotkeys by default; record them on the "Hotkeys" tab of the settings.
 

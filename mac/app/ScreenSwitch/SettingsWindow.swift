@@ -121,12 +121,12 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     // ---- 输入口
 
     func mainScreenRow() -> NSView {
-        let title = data.status.configured ? L("ports.mainScreen", data.status.mainScreen) : L("ports.mainNone")
-        let button = ActionButton(L("ports.redetect")) { [weak self] in self?.redetect(main: nil) }
+        let title = data.status.configured ? L("ports.main", data.status.mainScreen) : L("ports.main-none")
+        let button = ActionButton(L("ports.detect")) { [weak self] in self?.redetect(main: nil) }
         button.isEnabled = !detecting
         var views: [NSView] = [label(title, bold: true), button]
         if detecting || !detectMessage.isEmpty {
-            views.append(label(detecting ? L("ports.detecting") : detectMessage, small: true, secondary: true))
+            views.append(label(detecting ? L("mac.ports.detecting") : detectMessage, small: true, secondary: true))
         }
         return hstack(views)
     }
@@ -143,19 +143,19 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
                 self.chooseMain(r.candidates)
                 return
             }
-            if r.ok { self.detectMessage = L("ports.detected") }
+            if r.ok { self.detectMessage = L("mac.ports.detected") }
             self.applied(r.ok ? nil : r)
         }
     }
 
     func chooseMain(_ names: [String]) {
         let a = NSAlert()
-        a.messageText = L("ports.chooseMain")
+        a.messageText = L("ports.choose")
         let popup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 240, height: 26), pullsDown: false)
         popup.addItems(withTitles: names)
         a.accessoryView = popup
         a.addButton(withTitle: L("common.ok"))
-        a.addButton(withTitle: L("common.cancel"))
+        a.addButton(withTitle: L("wizard.cancel"))
         a.beginSheetModal(for: window!) { [weak self] r in
             if r == .alertFirstButtonReturn, let n = popup.titleOfSelectedItem { self?.redetect(main: n) }
             else { self?.applied(nil) }
@@ -173,8 +173,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         editor.onAdd = { [weak self] c in self?.extraPorts.insert(c) }
         editor.onChange = { [weak self] old, new in self?.applyPort(old, new) }
         var views: [NSView] = [mainScreenRow(), separatorLine(), editor.view]
-        if data.status.configured && !data.ports.monitorKnown { views.append(helpText(L("ports.unknownList"))) }
-        views.append(helpText(L("ports.help")))
+        if data.status.configured && !data.ports.monitorKnown { views.append(helpText(L("ports.unknown"))) }
+        views.append(helpText(L("mac.ports.help")))
         return vstack(views, spacing: 12)
     }
 
@@ -226,34 +226,34 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     func screensTab() -> NSView {
         let info = data.info
         let combo: String
-        if info.layout == "none" { combo = L("screens.combo.none") }
-        else if info.secondBuiltin { combo = L("screens.combo.builtin") }
-        else { combo = L("screens.combo.external") }
-        let redetect = ActionButton(L("ports.redetect")) { [weak self] in self?.redetect(main: nil) }
+        if info.layout == "none" { combo = L("mac.screens.combo.none") }
+        else if info.secondBuiltin { combo = L("mac.screens.combo.builtin") }
+        else { combo = L("mac.screens.combo.external") }
+        let redetect = ActionButton(L("ports.detect")) { [weak self] in self?.redetect(main: nil) }
         redetect.isEnabled = !detecting
-        var views: [NSView] = [label(L("screens.combo"), bold: true), hstack([label(combo), redetect])]
-        if detecting { views.append(label(L("ports.detecting"), small: true, secondary: true)) }
+        var views: [NSView] = [label(L("mac.screens.combo"), bold: true), hstack([label(combo), redetect])]
+        if detecting { views.append(label(L("mac.ports.detecting"), small: true, secondary: true)) }
         // 只有主屏时只显示屏幕组合
         if info.layout != "none" {
             views.append(separatorLine())
             if info.secondBuiltin {
                 let mainOnly = info.ownedLayout == "external"
-                views.append(label(L("screens.afterTake"), bold: true))
+                views.append(label(L("screens.after-take"), bold: true))
                 views.append(Radio(L("menu.extend"), selected: !mainOnly) { [weak self] in self?.run(["set", "owned-layout", "extend"]) })
-                views.append(Radio(L("menu.mainOnly"), selected: mainOnly) { [weak self] in self?.run(["set", "owned-layout", "main-only"]) })
+                views.append(Radio(L("menu.main-only"), selected: mainOnly) { [weak self] in self?.run(["set", "owned-layout", "main-only"]) })
                 views.append(separatorLine())
             }
-            views.append(CheckBox(L("screens.autoSave"), checked: data.status.autoSave) { [weak self] on in
+            views.append(CheckBox(L("screens.autosave"), checked: data.status.autoSave) { [weak self] on in
                 self?.run(["set", "auto-save", on ? "on" : "off"])
             })
-            views.append(helpText(L("screens.autoSaveHelp")))
+            views.append(helpText(L("screens.autosave.note")))
             let saveResult = label("", small: true, secondary: true)
-            let save = ActionButton(L("screens.saveNow")) {
+            let save = ActionButton(L("screens.save-now")) {
                 let r = Script.run(["save-layout"])
                 saveResult.stringValue = r.ok ? L("screens.saved") : r.message
             }
             views.append(hstack([save, saveResult]))
-            views.append(helpText(L("screens.saveNowHelp")))
+            views.append(helpText(L("mac.screens.saveNowHelp")))
         }
         return vstack(views, spacing: 10)
     }
@@ -261,10 +261,10 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     // ---- 快捷键
 
     func hotkeysTab() -> NSView {
-        var rows: [NSView] = [helpText(L("hotkeys.help")), separatorLine()]
-        rows.append(hotkeyRow(L("hotkeys.peer"), who: "peer", spec: data.info.hotkeyPeer, target: .peer))
+        var rows: [NSView] = [helpText(L("mac.hotkeys.help")), separatorLine()]
+        rows.append(hotkeyRow(L("hotkey.target.peer"), who: "peer", spec: data.info.hotkeyPeer, target: .peer))
         for d in data.info.devices {
-            rows.append(hotkeyRow(L("menu.switchTo", d.name), who: "\(d.code)", spec: d.hotkey, target: .device(d.code)))
+            rows.append(hotkeyRow(L("menu.give-to", d.name), who: "\(d.code)", spec: d.hotkey, target: .device(d.code)))
         }
         return vstack(rows, spacing: 12)
     }
@@ -300,7 +300,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         // 需要处理的问题（菜单里点"⚠"那一行会打开这里）
         let problems = appDelegate.currentProblems()
         if problems.contains(.daemonDown) {
-            views.append(problemRow(L("menu.problem.daemonDown"), L("mac.general.restartDaemon")) { [weak self] in
+            views.append(problemRow(L("mac.menu.problem.daemonDown"), L("mac.general.restartDaemon")) { [weak self] in
                 AppDelegate.launchctl(["kickstart", "-k", "gui/\(getuid())/com.user.screenctl"])
                 appDelegate.ensureDaemonLoaded()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 3) { appDelegate.updateIcon(); self?.reloadAll() }
@@ -316,8 +316,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         views.append(CheckBox(L("general.autostart"), checked: data.status.autostart) { [weak self] on in
             self?.run(["autostart", on ? "on" : "off"])
         })
-        views.append(ActionButton(L("general.rerunWizard")) { WizardWindowController.show() })
-        views.append(ActionButton(L("general.openLog")) {
+        views.append(ActionButton(L("general.wizard")) { WizardWindowController.show() })
+        views.append(ActionButton(L("general.log")) {
             NSWorkspace.shared.open(URL(fileURLWithPath: logPath))
         })
         views.append(label(L("general.version", appVersion), secondary: true))
@@ -337,13 +337,13 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         title.isBordered = false
         views.append(hstack([triangle, title], spacing: 4))
         if advancedOpen {
-            let direct = CheckBox(L("general.directTake"), checked: data.status.directTake) { [weak self] on in
+            let direct = CheckBox(L("mac.general.directTake"), checked: data.status.directTake) { [weak self] on in
                 self?.run(["set", "direct-take", on ? "on" : "off"])
             }
-            let folder = ActionButton(L("general.openConfigFolder")) {
+            let folder = ActionButton(L("general.openfolder")) {
                 NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: configPath)])
             }
-            let adv = vstack([direct, helpText(L("general.directTakeHelp"), width: 440), folder], spacing: 8)
+            let adv = vstack([direct, helpText(L("mac.general.directTakeHelp"), width: 440), folder], spacing: 8)
             views.append(padded(adv, inset: 0).withLeadingInset(22))
         }
         return vstack(views, spacing: 12)

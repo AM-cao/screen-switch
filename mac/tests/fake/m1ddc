@@ -13,7 +13,10 @@ MON=${FAKE_MON:-$FAKE_DIR}
 ME=${FAKE_SELF:-15}
 if [ "$1 $2" = "display list" ]; then
   echo "[1] (null) (11111111-2222-3333-4444-555555555555)"; echo "[2] P275MV (AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE)"
-  [ "$(cat $S/topology 2>/dev/null)" = ext ] && echo "[3] SIDE24 (EEEEEEEE-FFFF-0000-1111-222222222222)"
+  # $S/twin 存在时另一块外接屏和主屏同型号
+  if [ "$(cat $S/topology 2>/dev/null)" = ext ]; then
+    if [ -f $S/twin ]; then echo "[3] P275MV (EEEEEEEE-FFFF-0000-1111-222222222222)"; else echo "[3] SIDE24 (EEEEEEEE-FFFF-0000-1111-222222222222)"; fi
+  fi
   exit 0
 fi
 cur=$(cat $MON/input)
