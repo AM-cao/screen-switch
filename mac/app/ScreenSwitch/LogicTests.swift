@@ -70,6 +70,8 @@ func runLogicTests() -> Bool {
     print("== 快捷键写法")
     check(HotKey.parse("Ctrl+Alt+1")?.spec == "ctrl+opt+1" && HotKey.parse("ctrl+alt+1")?.display == "⌃⌥1", "Ctrl+Alt+1 → ctrl+opt+1，显示 ⌃⌥1")
     check(HotKey.parse("cmd+shift+p")?.spec == "shift+cmd+p" && HotKey.parse("cmd+shift+p")?.display == "⇧⌘P", "修饰键按固定顺序")
+    check(PeerEditor.maskedKey("ssh-ed25519 AAAAC3Nza screenctl@mac") == "ssh-ed25519 ••••••••••••", "公钥打码：只留类型")
+    check(!PeerEditor.maskedKey("ssh-ed25519 AAAAC3Nza screenctl@mac").contains("AAAA"), "打码后看不到公钥内容")
     check(HotKey.parse("shift+1") == nil && HotKey.parse("1") == nil, "只带 Shift 或不带修饰键：不接受")
     check(HotKey.parse("x") == nil && HotKey.parse("ctrl+f1") == nil && HotKey.parse("hyper+1") == nil, "写法不对返回 nil")
 

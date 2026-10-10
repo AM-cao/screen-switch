@@ -34,7 +34,7 @@ fresh blank
 run $S status
 [ $RC -eq 0 ] && [ "$(json "$OUT" 'j["configured"], j["self"]["code"], j["mainScreen"], j["problems"], j["owned"], j["trayRunning"]')" = "(False, 0, '', ['还没有设置：请运行设置向导。'], None, False)" ] \
   && ok "status：configured=false，本机编码 0，problems 是“还没有设置”的说明" || bad "status blank: rc=$RC $OUT"
-[ "$(json "$OUT" 'sorted(j.keys())')" = "['autoSave', 'autostart', 'configured', 'devices', 'directTake', 'layout', 'mainScreen', 'owned', 'ownedLayout', 'peer', 'problems', 'self', 'trayRunning']" ] \
+[ "$(json "$OUT" 'sorted(j.keys())')" = "['autoSave', 'autostart', 'configured', 'devices', 'directTake', 'language', 'layout', 'mainScreen', 'owned', 'ownedLayout', 'peer', 'problems', 'self', 'trayRunning']" ] \
   && [ "$(json "$OUT" 'sorted(j["peer"].keys()), sorted(j["self"].keys())')" = "(['code', 'configured', 'host', 'name', 'os', 'user'], ['code', 'name'])" ] \
   && ok "status 的字段与规范一致" || bad "status keys: $(json "$OUT" 'sorted(j.keys())')"
 [ "$(printf '%s\n' "$OUT" | wc -l | tr -d ' ')" = 1 ] && ok "status 只有一行" || bad "status lines"
@@ -185,6 +185,17 @@ expect_done "device remove"
 sed -n '/^HOTKEY_DEVICES=(/,/^)/p' $SCREENCTL_DIR/config.sh | grep -q "'shift+cmd+p'" && run $S status \
   && [ "$(json "$OUT" '[(d["code"], d["hotkey"]) for d in j["devices"]]')" = "[(18, 'shift+cmd+p'), (27, '')]" ] \
   && ok "删掉设备后，其余设备的快捷键仍对得上" || bad "hotkeys after remove: $(json "$OUT" 'j["devices"]')"
+echo "== 界面语言"
+run env -u SCREENSWITCH_LANG $S set language en
+[ $RC -eq 0 ] && [ "$OUT" = "Done." ] && ok "set language en：之后的提示用英文" || bad "set language en: rc=$RC [$OUT]"
+C | grep -q "^UI_LANG=en" && ok "配置记下 UI_LANG=en" || bad "UI_LANG: $(C | grep '^UI_LANG')"
+run env -u SCREENSWITCH_LANG $S status
+[ "$(json "$OUT" 'j["language"]')" = "en" ] && ok "status.language = en" || bad "status language: $OUT"
+run env -u SCREENSWITCH_LANG $S set language fr
+expect_error "set language fr：error" "fr"
+run $S set language auto
+expect_done "set language auto"
+C | grep -q "^UI_LANG=auto" && ok "回到跟随系统" || bad "UI_LANG auto: $(C | grep '^UI_LANG')"
 run $S set hotkey peer shift+1
 expect_error "只带 Shift 的快捷键：error" "shift+1"
 run $S set hotkey peer none

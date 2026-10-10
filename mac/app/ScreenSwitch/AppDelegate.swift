@@ -127,6 +127,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
         configMTime = fileMTime(configPath)
         let wasConfigured = menuInfo.configured
         menuInfo = MenuInfo.load()
+        applyLanguage()
         // 向导还停在欢迎页时，设置已经用命令（AI 助手按 AGENTS.md）做完了：关掉向导
         if !wasConfigured && menuInfo.configured, let w = WizardWindowController.current, w.page == .welcome, !w.finishing {
             WizardDraft.clear()
@@ -134,6 +135,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
             w.close()
         }
         HotKeyManager.shared.update(menuInfo)
+        updateIcon()
+    }
+
+    // 界面语言改了（设置窗口、命令或 AI 助手改的）：已打开的窗口立即换语言；菜单每次打开时现画
+    func applyLanguage() {
+        guard menuInfo.language != Strings.preference else { return }
+        let before = Strings.isChinese
+        Strings.preference = menuInfo.language
+        guard Strings.isChinese != before else { return }
+        SettingsWindowController.current?.languageChanged()
+        WizardWindowController.current?.languageChanged()
         updateIcon()
     }
 
@@ -240,6 +252,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menuInfo = MenuInfo.load()
+        applyLanguage()
         buildMenu(menu)
     }
 

@@ -108,6 +108,7 @@ struct Status {
     var ownedLayout = "extend"
     var autoSave = true
     var directTake = true
+    var language = "auto"
     var peerConfigured = false
     var peerName = ""
     var peerOS = ""
@@ -132,6 +133,7 @@ struct Status {
         ownedLayout = j["ownedLayout"] as? String ?? "extend"
         autoSave = j["autoSave"] as? Bool ?? true
         directTake = j["directTake"] as? Bool ?? true
+        language = j["language"] as? String ?? "auto"
         let p = j["peer"] as? [String: Any] ?? [:]
         peerConfigured = p["configured"] as? Bool ?? false
         peerName = p["name"] as? String ?? ""
@@ -244,6 +246,7 @@ struct MenuInfo {
     var secondBuiltin = true    // 另一块屏是笔记本自带屏时才有"只用主屏"
     var ownedLayout = "extend"  // extend | external（只用主屏）
     var hotkeyPeer = ""
+    var language = "auto"       // 界面语言：auto | zh | en
     var devices: [Device] = []
 
     static func parse(_ text: String) -> MenuInfo {
@@ -259,6 +262,7 @@ struct MenuInfo {
             case "second_builtin": info.secondBuiltin = value == "1"
             case "owned_layout": info.ownedLayout = value
             case "hotkey_peer": info.hotkeyPeer = value
+            case "language": info.language = value
             case "device":
                 let f = value.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
                 if f.count >= 2, let c = Int(f[0]) {

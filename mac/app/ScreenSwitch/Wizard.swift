@@ -215,6 +215,13 @@ final class WizardWindowController: NSWindowController, NSWindowDelegate {
         if p == .ports && draft.portsFor != draft.mainUUID { loadPorts() }
     }
 
+    func languageChanged() {
+        window?.title = L("wizard.title")
+        backButton.title = L("wizard.back")
+        skipButton.title = L("wizard.skip")
+        render()
+    }
+
     func render() {
         titleLabel.stringValue = page.title
         stepLabel.stringValue = L("mac.wizard.step", "\(page.rawValue + 1)", "\(WizardPage.allCases.count)")

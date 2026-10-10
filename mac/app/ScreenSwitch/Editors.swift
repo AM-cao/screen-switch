@@ -132,6 +132,12 @@ struct PeerFields: Equatable {
 }
 
 final class PeerEditor {
+    // 公钥打码：类型 + 圆点
+    static func maskedKey(_ key: String) -> String {
+        let type = key.split(separator: " ").first.map(String.init) ?? ""
+        return (type.hasPrefix("ssh-") || type.hasPrefix("ecdsa-") ? type + " " : "") + String(repeating: "•", count: 12)
+    }
+
     var fields: PeerFields
     let inWizard: Bool
     var onFieldsChanged: ((PeerFields) -> Void)?
@@ -191,7 +197,8 @@ final class PeerEditor {
         view.addArrangedSubview(label(L("mac.peer.selfKey"), bold: true))
         let pub = Script.run(["pubkey"])
         let key = pub.ok ? pub.output.trimmingCharacters(in: .whitespacesAndNewlines) : pub.message
-        keyLabel.stringValue = key
+        // 不明文显示，只留类型（如 ssh-ed25519 ••••••••••••）；"复制"照常复制完整公钥
+        keyLabel.stringValue = pub.ok ? Self.maskedKey(key) : key
         keyLabel.font = .monospacedSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
         let copy = ActionButton(L("peer.copy")) { [weak self] in
             NSPasteboard.general.clearContents()

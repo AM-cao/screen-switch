@@ -53,6 +53,7 @@ CODE_PEER=""         # 对方所接输入口的编码；留空 = 未知，切给
 DEVICES=()           # 其他设备（游戏机等），每项 '名字=编码'
 HOTKEY_PEER=""       # 菜单栏程序的全局快捷键：占有时切给对方，未占有时拿回；留空 = 不注册
 HOTKEY_DEVICES=()    # 各设备的快捷键，与 DEVICES 一一对应；留空 = 不注册
+UI_LANG=auto         # 界面语言：auto = 跟随系统；zh；en
 DIRECT_TAKE=1        # 1 = 拿回时先直接向主屏发切换指令（有的显示器在非活跃口也接受），不行再请对方代发
 DIRECT_WAIT_SECS=3   # 对方没帮上忙时，等几秒看直接发的指令有没有生效
 LAYOUT=""            # second = 本机另有一块屏；none = 只有主屏，不调整布局；留空 = second
@@ -96,6 +97,7 @@ normalize_config() {
     [ -n "$PEER_USER" ] || PEER_USER=$WIN_USER
     [ -n "$PEER_PROG" ] || PEER_PROG=$WIN_EXE
     [ -n "$PEER_OS" ] || PEER_OS=windows
+    case "$UI_LANG" in auto|zh|en) ;; *) UI_LANG=auto ;; esac
     if [ -z "$PEER_NAME" ]; then
         if [ "$PEER_OS" = mac ]; then PEER_NAME=Mac; else PEER_NAME=Windows; fi
     fi
@@ -125,7 +127,10 @@ fi
 UI_COL=""
 
 ui_lang() {
-    local l=${SCREENSWITCH_LANG:-}
+    local l=${SCREENSWITCH_LANG:-} pref=$UI_LANG
+    # 设置里选了中文或 English 就用它（配置可能还没读，直接从文件里取）
+    [ -n "$l" ] || [ "$pref" != auto ] || pref=$(sed -n "s/^UI_LANG='\{0,1\}\([a-z]*\).*/\1/p" "$CONFIG" 2>/dev/null | head -1)
+    case "$pref" in zh|en) [ -n "$l" ] || l=$pref ;; esac
     [ -n "$l" ] || l=$(defaults read -g AppleLanguages 2>/dev/null | sed -n '2{s/[^A-Za-z-]//g;p;}')
     case "$l" in zh*) echo zh ;; *) echo en ;; esac
 }
@@ -1468,6 +1473,7 @@ write_config() {
         echo "DEVICES=("
         for v in "${DEVICES[@]}"; do echo "    $(sq "$v")"; done
         echo ")"
+        echo "UI_LANG=$UI_LANG   # 界面语言：auto = 跟随系统；zh；en"
         echo "DIRECT_TAKE=$DIRECT_TAKE   # 1 = 拿回时先直接向主屏发切换指令，不行再请对方代发"
         echo "DIRECT_WAIT_SECS=$DIRECT_WAIT_SECS"
         echo
@@ -1956,7 +1962,7 @@ cmd_status() {
     fi
     out="$out,\"layout\":$(json_str "$LAYOUT")"
     if [ "$(want_layout)" = external ]; then out="$out,\"ownedLayout\":\"main-only\""; else out="$out,\"ownedLayout\":\"extend\""; fi
-    out="$out,\"autoSave\":$(json_bool "$AUTO_SAVE_LAYOUT"),\"directTake\":$(json_bool "$DIRECT_TAKE")"
+    out="$out,\"autoSave\":$(json_bool "$AUTO_SAVE_LAYOUT"),\"directTake\":$(json_bool "$DIRECT_TAKE"),\"language\":$(json_str "$UI_LANG")"
     if peer_configured; then
         out="$out,\"peer\":{\"configured\":true,\"name\":$(json_str "$PEER_NAME"),\"os\":$(json_str "$PEER_OS")"
     else
@@ -2312,6 +2318,14 @@ cmd_set() {
             log "set: DIRECT_TAKE=$v"
             reload_daemon
             say_done ;;
+        language)
+            [ $# -eq 2 ] || die "$(t mac.usage.set)"
+            case "$v" in auto|zh|en) ;; *) die "$(t err.option.value language "$v")" ;; esac
+            load_config; UI_LANG=$v; write_config
+            log "set: UI_LANG=$v"
+            UI_COL=""   # "已完成"用新语言
+            reload_daemon
+            say_done ;;
         hotkey)
             [ $# -eq 3 ] || die "$(t mac.usage.set)"
             local who=$2 combo=$3
@@ -2580,6 +2594,7 @@ cmd_menu_info() {
     echo "owned_layout=$OWNED_LAYOUT"
     echo "auto_save=$AUTO_SAVE_LAYOUT"
     echo "hotkey_peer=$HOTKEY_PEER"
+    echo "language=$UI_LANG"
     for e in "${DEVICES[@]}"; do
         printf 'device=%s\t%s\t%s\n' "${e##*=}" "${e%=*}" "${HOTKEY_DEVICES[$i]}"
         i=$((i + 1))

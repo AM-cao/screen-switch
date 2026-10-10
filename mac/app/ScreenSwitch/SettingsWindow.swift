@@ -87,6 +87,12 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         Self.current = nil
     }
 
+    func languageChanged() {
+        window?.title = L("settings.title")
+        for t in SettingsTab.allCases { tabView.tabViewItem(at: t.rawValue).label = t.title }
+        reloadAll()
+    }
+
     func reloadAll() {
         data = SettingsData.load()
         for t in SettingsTab.allCases { render(t) }
@@ -318,6 +324,13 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         }
         if !views.isEmpty { views.append(separatorLine()) }
 
+        // 界面语言："中文""English"两种语言下都显示原文，看不懂当前语言的人也能切回来
+        let langs = ["auto", "zh", "en"]
+        let langPopup = PopUp([L("general.language.auto"), L("general.language.zh"), L("general.language.en")],
+                              selected: langs.firstIndex(of: data.status.language) ?? 0) { [weak self] i in
+            self?.run(["set", "language", langs[i]])
+        }
+        views.append(hstack([label(L("general.language")), langPopup]))
         views.append(CheckBox(L("general.autostart"), checked: data.status.autostart) { [weak self] on in
             self?.run(["autostart", on ? "on" : "off"])
         })
