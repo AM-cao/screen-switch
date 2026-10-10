@@ -17,6 +17,8 @@ namespace ScreenSwitch
                 var stdout = new StreamWriter(Console.OpenStandardOutput());
                 stdout.AutoFlush = true;
                 Console.SetOut(stdout);
+                // 命令行的输出语言也按 uiLanguage（程序所在目录的 config.json）
+                Tr.Apply(Config.Load(Paths.Config).UiLanguage);
                 return Cli.Run(args, Paths.Dir);
             }
             bool created;

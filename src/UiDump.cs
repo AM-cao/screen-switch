@@ -40,6 +40,7 @@ namespace ScreenSwitch
             public void RunWizard() { }
             public void OpenLog() { }
             public IList<string> HotkeyProblems { get { return new List<string>(); } }
+            public void LanguageChanged(string setting) { }
         }
 
         static Config Demo()

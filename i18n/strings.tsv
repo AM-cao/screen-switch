@@ -102,6 +102,10 @@ general.advanced	高级	Advanced
 general.directtake	先直接切换（显示器在其他输入口也接受指令时更快）	Try switching directly first (faster on monitors that accept commands on any input)
 general.aftertake	拿回主屏后执行的命令：	Command to run after taking back the main screen:
 general.openfolder	打开配置文件所在的文件夹	Open the folder with the configuration
+general.language	界面语言	Language
+general.language.auto	跟随系统	Same as system
+general.language.zh	中文	中文
+general.language.en	English	English
 wizard.cancel	取消	Cancel
 menu.give-to	切给 {0}	Switch to {0}
 common.ok	确定	OK

@@ -8,7 +8,7 @@ using System.Text;
 namespace ScreenSwitch
 {
     // 给人看的文字（docs/settings-ui-design.md 第 8 节）。i18n/strings.tsv 在构建时作为资源 strings.tsv 嵌入。
-    // 语言跟随系统界面语言：zh 开头用中文，否则英文。缺的编号原样显示编号，测试会查出来。
+    // 语言按 config.json 的 uiLanguage（Apply）；auto 跟随系统界面语言：zh 开头用中文，否则英文。缺的编号原样显示编号，测试会查出来。
     public static class Tr
     {
         static Dictionary<string, string[]> table;
@@ -24,6 +24,26 @@ namespace ScreenSwitch
         public static string Detect(string cultureName)
         {
             return cultureName != null && cultureName.StartsWith("zh", StringComparison.OrdinalIgnoreCase) ? "zh" : "en";
+        }
+
+        // 界面语言设置（config.json 的 uiLanguage）：auto | zh | en；缺失或不认识的值算 auto
+        public static string Setting(string value)
+        {
+            string v = (value ?? "").Trim().ToLowerInvariant();
+            return v == "zh" || v == "en" ? v : "auto";
+        }
+
+        // 设置对应的语言：zh、en 照设置；auto 跟随系统界面语言（cultureName）
+        public static string Resolve(string setting, string cultureName)
+        {
+            string s = Setting(setting);
+            return s == "auto" ? Detect(cultureName) : s;
+        }
+
+        // 按设置切换语言（托盘启动、每次重新加载、每条命令开始时）
+        public static void Apply(string setting)
+        {
+            Use(Resolve(setting, CultureInfo.CurrentUICulture.Name));
         }
 
         public static string T(string key, params object[] args)

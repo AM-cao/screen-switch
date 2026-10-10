@@ -19,6 +19,8 @@ namespace ScreenSwitch
         void OpenLog();
         // 没能注册的快捷键（写法）
         IList<string> HotkeyProblems { get; }
+        // 界面语言设置（auto | zh | en）已写入配置：马上换语言，菜单、设置窗口、向导随后重画
+        void LanguageChanged(string setting);
     }
 
     // 界面的小工具：统一字体与间距，所有文字左对齐
@@ -223,8 +225,8 @@ namespace ScreenSwitch
             keyRow.Controls.Add(MyKeyBox);
             keyRow.Controls.Add(Ui.Button(Tr.T("peer.copy"), delegate
             {
-                if (MyKeyBox.Text.Length == 0) return;
-                try { Clipboard.SetText(MyKeyBox.Text); }
+                if (myKey.Length == 0) return;
+                try { Clipboard.SetText(myKey); }
                 catch (System.Runtime.InteropServices.ExternalException e) { Ui.Error(AuthLabel, e.Message); return; }
                 Ui.Ok(AuthLabel, Tr.T("peer.copied"));
             }));
@@ -256,7 +258,42 @@ namespace ScreenSwitch
             NameBox.Text = c.PeerConfigured ? c.PeerName : "";
             OsBox.SelectedIndex = c.PeerOs == "windows" ? 0 : 1;
             HostBox.Text = c.PeerHost; UserBox.Text = c.PeerUser;
-            MyKeyBox.Text = myKey ?? "";
+            MyKey = myKey;
+        }
+
+        // 换界面语言时向导换上新建的面板：把旧面板上填的、显示的都搬过来
+        public void CopyFrom(PeerPanel o)
+        {
+            NameBox.Text = o.NameBox.Text;
+            OsBox.SelectedIndex = o.OsBox.SelectedIndex;
+            HostBox.Text = o.HostBox.Text; UserBox.Text = o.UserBox.Text;
+            PeerKeyBox.Text = o.PeerKeyBox.Text;
+            MyKey = o.MyKey;
+            foreach (Label[] pair in new Label[][] { new Label[] { o.AuthLabel, AuthLabel }, new Label[] { o.TestLabel, TestLabel }, new Label[] { o.SshLabel, SshLabel } })
+            {
+                pair[1].ForeColor = pair[0].ForeColor;
+                pair[1].Text = pair[0].Text;
+            }
+        }
+
+        // 这台电脑的完整公钥：留在这里给"复制"用，框里只显示遮住的样子（MaskKey）
+        string myKey = "";
+        public string MyKey
+        {
+            get { return myKey; }
+            set { myKey = (value ?? "").Trim(); MyKeyBox.Text = MaskKey(myKey); }
+        }
+
+        // "ssh-ed25519 AAAA… 注释" → "ssh-ed25519 ••••••••••••"（12 个圆点）；没有类型时只显示圆点，空的仍为空
+        public static string MaskKey(string key)
+        {
+            string k = (key ?? "").Trim();
+            if (k.Length == 0) return "";
+            string dots = new string('•', 12);
+            int sp = k.IndexOfAny(new char[] { ' ', '\t' });
+            // 第一段就是密钥本身（Base64 的密钥都以 AAAA 开头）：一点也不显示
+            if (sp <= 0 || k.StartsWith("AAAA", StringComparison.Ordinal)) return dots;
+            return k.Substring(0, sp) + " " + dots;
         }
 
         public string PeerName { get { return NameBox.Text.Trim(); } }

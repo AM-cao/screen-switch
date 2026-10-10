@@ -151,6 +151,9 @@ namespace ScreenSwitch
                 case "direct-take":
                     if (v != "on" && v != "off") return Bad(key, v);
                     return Edit(delegate(Config c) { c.DirectTake = v == "on"; return null; });
+                case "language":
+                    if (v != "auto" && v != "zh" && v != "en") return Bad(key, v);
+                    return Edit(delegate(Config c) { c.UiLanguage = v; return null; });
                 case "after-take":
                     if (v == null) return Bad(key, "");
                     return Edit(delegate(Config c) { c.AfterTakeCommand = v.Trim(); return null; });
@@ -400,6 +403,7 @@ namespace ScreenSwitch
             st["ownedLayout"] = p.OwnedLayout == OwnedLayout.MainOnly ? "main-only" : "extend";
             st["autoSave"] = p.AutoSaveLayout;
             st["directTake"] = c.DirectTake;
+            st["language"] = Tr.Setting(c.UiLanguage);
             st["peer"] = peer;
             st["devices"] = devices;
             st["trayRunning"] = running;

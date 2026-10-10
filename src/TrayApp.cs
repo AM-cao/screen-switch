@@ -73,6 +73,8 @@ namespace ScreenSwitch
         // 没有布局快照的情况已经处理过（保存了或提示过）：重新加载时不再重复提示；有快照后复位
         bool snapshotHandled;
         int busy;
+        // 菜单、设置窗口、向导现在显示的语言（zh | en）
+        string shownLang;
 
         public TrayApp(string dir)
         {
@@ -84,6 +86,7 @@ namespace ScreenSwitch
             form.OnSessionEnd = OnSessionEnd;
 
             BuildEngine(true);
+            UseLanguage(cfg.UiLanguage);
 
             menu = new ContextMenuStrip();
             menu.RenderMode = ToolStripRenderMode.System;
@@ -179,7 +182,13 @@ namespace ScreenSwitch
             hotkeys.Clear();
             try
             {
-                if (BuildEngine(false)) { rebuilt = true; log.Info("config reloaded"); }
+                if (BuildEngine(false))
+                {
+                    rebuilt = true;
+                    log.Info("config reloaded");
+                    // 界面语言变了（命令行 set language、手改配置）：菜单在下面重画，设置窗口整个重画，向导重建
+                    if (UseLanguage(cfg.UiLanguage)) { refreshSettings = true; RefreshWizardLater(); }
+                }
                 else Notify(Tr.T("notify.config-kept"), rejectedConfigError);
             }
             catch (Exception e)
@@ -211,6 +220,24 @@ namespace ScreenSwitch
             SettingsForm s = settings;
             if (s == null || s.IsDisposed || !s.IsHandleCreated) return;
             s.BeginInvoke(new Action(delegate { if (!s.IsDisposed) s.Rebuild(); }));
+        }
+
+        void RefreshWizardLater()
+        {
+            WizardForm w = wizard;
+            if (w == null || w.IsDisposed || !w.IsHandleCreated) return;
+            w.BeginInvoke(new Action(delegate { if (!w.IsDisposed) w.Relanguage(); }));
+        }
+
+        // 按界面语言设置换语言；返回 true = 显示的语言变了，界面要重画（之后的通知自然用新语言）
+        bool UseLanguage(string setting)
+        {
+            Tr.Apply(setting);
+            if (Tr.Lang == shownLang) return false;
+            bool first = shownLang == null;
+            shownLang = Tr.Lang;
+            if (!first) log.Info("ui language: " + shownLang);
+            return !first;
         }
 
         bool UiAlive() { return form != null && form.IsHandleCreated && !form.IsDisposed; }
@@ -313,6 +340,16 @@ namespace ScreenSwitch
             catch (Exception e) { Notify(Tr.T("notify.log-failed"), e.Message); }
         }
         public IList<string> HotkeyProblems { get { return new List<string>(hotkeyProblems); } }
+
+        // 设置窗口改了界面语言（已写入配置）：马上换，不等重新加载（正在切换时重新加载要等切换结束）。
+        // 菜单立即重画；设置窗口和向导排到当前处理之后再重画（不能在下拉框自己的处理里销毁它）。
+        public void LanguageChanged(string setting)
+        {
+            if (!UseLanguage(setting)) return;
+            RebuildMenu();
+            RefreshSettingsLater();
+            RefreshWizardLater();
+        }
 
         WizardForm wizard;
 

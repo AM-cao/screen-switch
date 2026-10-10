@@ -402,6 +402,40 @@ namespace ScreenSwitch.Tests
             Directory.Delete(d, true);
         }
 
+        public static void Test_SetOption_Language()
+        {
+            string d = TempDir(); int r;
+            var s = Make(d, new FakeSetupEnv(), out r);
+            Assert.Eq(null, s.SetOption("language", new string[] { "en" }), "en");
+            Assert.Eq("en", Saved(d).UiLanguage, "in config");
+            Assert.Eq(1, ReloadCounter(), "tray told to reload");
+            Assert.Eq("keep me", Saved(d).AfterTakeCommand, "other settings kept");
+            Assert.Eq(null, s.SetOption("language", new string[] { "zh" }), "zh");
+            Assert.Eq("zh", Saved(d).UiLanguage, "zh saved");
+            Assert.Eq(null, s.SetOption("language", new string[] { "auto" }), "auto");
+            Assert.Eq("auto", Saved(d).UiLanguage, "auto saved");
+            Assert.Eq(Tr.T("err.option.value", "language", "fr"), s.SetOption("language", new string[] { "fr" }), "bad value");
+            Assert.Eq(Tr.T("err.option.value", "language", "EN"), s.SetOption("language", new string[] { "EN" }), "values are exact");
+            Assert.True(s.SetOption("language", new string[0]) != null, "missing value");
+            Assert.Eq("auto", Saved(d).UiLanguage, "unchanged after errors");
+            Assert.Eq(3, ReloadCounter(), "no reload for errors");
+            Directory.Delete(d, true);
+        }
+
+        // status 的 language 紧跟在 directTake 后面（字典的插入顺序就是 JSON 的顺序）
+        public static void Test_Status_LanguageAfterDirectTake()
+        {
+            string d = TempDir(); int r;
+            var s = Make(d, new FakeSetupEnv(), out r);
+            Dictionary<string, object> st = s.Status();
+            Assert.Eq("auto", st["language"], "default auto");
+            var keys = new List<string>(st.Keys);
+            Assert.Eq(keys.IndexOf("directTake") + 1, keys.IndexOf("language"), "right after directTake");
+            s.SetOption("language", new string[] { "en" });
+            Assert.Eq("en", s.Status()["language"], "en");
+            Directory.Delete(d, true);
+        }
+
         public static void Test_Status_FieldsAndProblems()
         {
             string d = TempDir(); int r;

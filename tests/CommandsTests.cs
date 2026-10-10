@@ -133,6 +133,24 @@ namespace ScreenSwitch.Tests
             Directory.Delete(d, true);
         }
 
+        public static void Test_SetLanguage_StatusField()
+        {
+            string d; FakeSetupEnv env;
+            var s = Svc(out d, out env);
+            Out o = Run(s, "set", "language", "en");
+            Assert.Eq(0, o.Rc, "ok");
+            Assert.Eq(Tr.T("cmd.ok"), o.Text.Trim(), "done line");
+            string st = Run(s, "status").Text;
+            Assert.True(st.Contains("\"directTake\":true,\"language\":\"en\""), "language right after directTake: " + st);
+            Out bad = Run(s, "set", "language", "xx");
+            Assert.Eq(1, bad.Rc, "bad value");
+            Assert.Eq("error: " + Tr.T("err.option.value", "language", "xx"), bad.Text.Trim(), "existing message");
+            Assert.Eq(1, Run(s, "set", "language").Rc, "missing value");
+            Assert.Eq(0, Run(s, "set", "language", "auto").Rc, "auto");
+            Assert.Eq("auto", Parse(Run(s, "status").Text)["language"], "back to auto");
+            Directory.Delete(d, true);
+        }
+
         public static void Test_Pubkey_Authorize_Set_Autostart()
         {
             string d; FakeSetupEnv env;

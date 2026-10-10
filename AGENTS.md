@@ -28,7 +28,7 @@ Program: `%USERPROFILE%\ScreenSwitch\ScreenSwitchCli.exe` (below: `ss`).
 6. `ss peer test` (after both sides authorised each other) prints JSON `{"name":...,"code":...,"codeSaved":...}`. Check: exit 0, `code` not 0.
 7. `ss autostart on`. Check: `status.autostart` is true and `status.problems` is empty.
 
-Other settings: `ss set owned-layout extend|main-only`, `ss set auto-save on|off`, `ss set direct-take on|off`, `ss set hotkey peer <combo>|none`, `ss set hotkey <code> <combo>|none`, `ss set after-take <command>`.
+Other settings: `ss set owned-layout extend|main-only`, `ss set auto-save on|off`, `ss set direct-take on|off`, `ss set language auto|zh|en`, `ss set hotkey peer <combo>|none`, `ss set hotkey <code> <combo>|none`, `ss set after-take <command>`.
 
 ## Mac
 

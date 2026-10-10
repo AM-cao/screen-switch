@@ -42,6 +42,8 @@ namespace ScreenSwitch
         public int PeerTimeoutSec = 3;
         public List<Device> Devices = new List<Device>();
         public bool DirectTake = true;
+        // 界面语言：auto（跟随系统）| zh | en
+        public string UiLanguage = "auto";
         public int PollMs = 2000;
         public int Debounce = 2;
         public string SshExe = "ssh.exe";
@@ -108,6 +110,7 @@ namespace ScreenSwitch
             string layout = Str(root, "layout", c.Layout).Trim().ToLowerInvariant();
             c.Layout = layout == "none" ? "none" : "second";
             c.DirectTake = Bool(root, "directTake", c.DirectTake);
+            c.UiLanguage = Tr.Setting(Get(root, "uiLanguage") as string);
             c.PollMs = Int(root, "pollMs", c.PollMs);
             c.Debounce = Int(root, "debounce", c.Debounce);
             c.SshExe = Str(root, "sshExe", c.SshExe);
@@ -190,6 +193,7 @@ namespace ScreenSwitch
             }
             sb.Append(Devices.Count == 0 ? "],\r\n" : "\r\n  ],\r\n");
             sb.Append("  \"directTake\": ").Append(DirectTake ? "true" : "false").Append(",\r\n");
+            sb.Append("  \"uiLanguage\": ").Append(Q(Tr.Setting(UiLanguage))).Append(",\r\n");
             sb.Append("  \"pollMs\": ").Append(PollMs).Append(", \"debounce\": ").Append(Debounce)
                 .Append(", \"sshExe\": ").Append(Q(SshExe)).Append(",\r\n");
             sb.Append("  \"release\": { \"width\": ").Append(ReleaseWidth).Append(", \"height\": ").Append(ReleaseHeight).Append(" },\r\n");

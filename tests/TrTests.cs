@@ -36,6 +36,43 @@ namespace ScreenSwitch.Tests
             Assert.Eq("en", Tr.Detect(""), "invariant -> English");
         }
 
+        // 界面语言设置（config.json 的 uiLanguage）：auto | zh | en，缺失或不认识的值算 auto
+        public static void Test_LanguageSetting_Normalize()
+        {
+            Assert.Eq("auto", Tr.Setting(null), "missing");
+            Assert.Eq("auto", Tr.Setting(""), "empty");
+            Assert.Eq("auto", Tr.Setting("fr"), "unknown");
+            Assert.Eq("zh", Tr.Setting("zh"), "zh");
+            Assert.Eq("en", Tr.Setting(" EN "), "case and spaces");
+            Assert.Eq("auto", Tr.Setting("auto"), "auto");
+        }
+
+        // 设置对应到实际使用的语言：auto 照旧跟随系统界面语言
+        public static void Test_LanguageSetting_Resolve()
+        {
+            Assert.Eq("zh", Tr.Resolve("zh", "en-US"), "zh wins over an English system");
+            Assert.Eq("en", Tr.Resolve("en", "zh-CN"), "en wins over a Chinese system");
+            Assert.Eq("zh", Tr.Resolve("auto", "zh-TW"), "auto on a Chinese system");
+            Assert.Eq("en", Tr.Resolve("auto", "ja-JP"), "auto on another system");
+            Assert.Eq("zh", Tr.Resolve(null, "zh-CN"), "missing = auto");
+            Assert.Eq("en", Tr.Resolve("bogus", "en-US"), "unknown = auto");
+        }
+
+        public static void Test_LanguageSetting_Apply()
+        {
+            try
+            {
+                Tr.Apply("en");
+                Assert.Eq("en", Tr.Lang, "en applied");
+                Assert.Eq("Done.", Tr.T("cmd.ok"), "text follows");
+                Tr.Apply("zh");
+                Assert.Eq("zh", Tr.Lang, "zh applied");
+                Tr.Apply("auto");
+                Assert.Eq(Tr.Detect(System.Globalization.CultureInfo.CurrentUICulture.Name), Tr.Lang, "auto = system");
+            }
+            finally { Tr.Use("zh"); }
+        }
+
         public static void Test_T_UsesLanguageAndFormats()
         {
             try

@@ -232,6 +232,31 @@ namespace ScreenSwitch.Tests
             File.Delete(p);
         }
 
+        // 界面语言：旧配置没有这个键 = auto；不认识的值 = auto；Save 写在 directTake 后面，读回不变
+        public static void Test_Config_UiLanguage_OldFileAndRoundTrip()
+        {
+            Assert.Eq("auto", new Config().UiLanguage, "default");
+            string p = Temp("{ \"mainEdid\": \"LHC9059\", \"directTake\": false }");
+            var c = Config.Load(p);
+            Assert.Eq(null, c.LoadError, "old file parses");
+            Assert.Eq("auto", c.UiLanguage, "old file without the key");
+            c.UiLanguage = "en";
+            c.Save(p);
+            string text = File.ReadAllText(p);
+            int dt = text.IndexOf("\"directTake\""), ui = text.IndexOf("\"uiLanguage\": \"en\"");
+            Assert.True(ui > dt && dt >= 0, "written right after directTake: " + text);
+            Assert.True(text.Substring(dt, ui - dt).Split('\n').Length == 2, "on the next line");
+            Assert.Eq("en", Config.Load(p).UiLanguage, "round trip");
+            Assert.Eq(false, Config.Load(p).DirectTake, "other keys kept");
+            File.WriteAllText(p, "{ \"uiLanguage\": \"fr\" }");
+            Assert.Eq("auto", Config.Load(p).UiLanguage, "unknown value");
+            File.WriteAllText(p, "{ \"uiLanguage\": 3 }");
+            Assert.Eq("auto", Config.Load(p).UiLanguage, "wrong type");
+            File.WriteAllText(p, "{ \"uiLanguage\": \"zh\" }");
+            Assert.Eq("zh", Config.Load(p).UiLanguage, "zh");
+            File.Delete(p);
+        }
+
         public static void Test_Config_MalformedJsonReturnsDefaults()
         {
             string p = Temp("{ \"peer\": { \"host\": \"x\", }");

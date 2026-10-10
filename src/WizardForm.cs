@@ -79,12 +79,16 @@ namespace ScreenSwitch
         readonly string brokenReason;
         // 打开向导时（或向导自己上次写入后）config.json 的最后写入时间：点"完成"时文件已经变了（命令行、AI 助手改过）要先问
         DateTime configStamp;
+        // 换界面语言时页面整个重建：表格、列表、勾选框等带状态的控件沿用同一个，搬进新页面；对方电脑面板新建，填的内容搬过去
         readonly PortTable portTable = new PortTable();
-        readonly PeerPanel peerPanel = new PeerPanel();
+        PeerPanel peerPanel;
         readonly CheckBox autostart = new CheckBox { AutoSize = true, Checked = true };
         readonly Label summary;
         public int PageIndex { get; private set; }
         public event Action Finished;
+
+        internal Config Work { get { return work; } }
+        internal PeerPanel Peer { get { return peerPanel; } }
 
         public WizardForm(SettingsService svc)
         {
@@ -108,10 +112,48 @@ namespace ScreenSwitch
             Controls.Add(bottom);
             summary = Ui.Line("");
             autostart.Text = Tr.T("general.autostart");
-            pages[0] = Welcome(); pages[1] = MainPage(); pages[2] = PortsPage(); pages[3] = PeerPage(); pages[4] = DonePage();
+            monitorList.SelectedIndexChanged += delegate
+            {
+                if (fillingList || detected == null || detected.Candidates.Count < 2) return;
+                // 按列表那一行记下的完整设备路径（同型号的两块，点哪块就是哪块），不按重新探测后的 detected
+                // ——那里的顺序和块数可能已经变了
+                string id = WizardLogic.PickedMonitor(monitorIds, monitorList.SelectedIndex);
+                if (id != null) StartDetect(id);
+            };
+            peerPanel = new PeerPanel();
+            peerPanel.SetValues(work, "");
+            BuildPages();
             // 先建好窗口句柄：后台读数完成时要 BeginInvoke 回来
             IntPtr handle = Handle;
             GoTo(0);
+        }
+
+        void BuildPages()
+        {
+            pages[0] = Welcome(); pages[1] = MainPage(); pages[2] = PortsPage(); pages[3] = PeerPage(); pages[4] = DonePage();
+        }
+
+        // 换了界面语言：五页按新语言重建，停在原来那一页；内存里的工作配置、各页还没提交的输入、检测结果都留着。
+        // 不重新检测、不重读输入口（重读会丢掉输入口表里没提交的改动）。
+        public void Relanguage()
+        {
+            Control[] old = (Control[])pages.Clone();
+            PeerPanel oldPeer = peerPanel;
+            List<PortRow> rows = portTable.GetRows();
+            Text = Tr.T("wizard.title");
+            back.Text = Tr.T("wizard.back");
+            autostart.Text = Tr.T("general.autostart");
+            body.Controls.Clear();
+            peerPanel = new PeerPanel();
+            peerPanel.CopyFrom(oldPeer);
+            // 沿用的控件在这里换到新页面上，旧页面（连同旧的对方电脑面板）随后释放
+            BuildPages();
+            foreach (Control p in old) if (p != null) p.Dispose();
+            portTable.SetRows(rows);
+            FillMonitorList(true);
+            if (detecting > 0) mainInfo.Text = Tr.T("wizard.main.detecting");
+            else if (detected != null) ShowDetected(detected);
+            ShowPage(PageIndex, false);
         }
 
         // 不在窗口里的页面不会随窗口一起释放，这里补上
@@ -121,7 +163,10 @@ namespace ScreenSwitch
             base.Dispose(disposing);
         }
 
-        public void GoTo(int page)
+        public void GoTo(int page) { ShowPage(page, true); }
+
+        // load：进入这一页时要不要重新检测、读输入口、读公钥（换语言重画时不要）
+        void ShowPage(int page, bool load)
         {
             if (page < 0 || page >= pages.Length) return;
             PageIndex = page;
@@ -130,9 +175,9 @@ namespace ScreenSwitch
             body.Controls.Add(pages[page]);
             back.Visible = page > 0;
             next.Text = page == pages.Length - 1 ? Tr.T("wizard.finish") : Tr.T("wizard.next");
-            if (page == 1) StartDetect(null);
-            if (page == 2) LoadPorts();
-            if (page == 3) LoadKey();
+            if (load && page == 1) StartDetect(null);
+            if (load && page == 2) LoadPorts();
+            if (load && page == 3) LoadKey();
             if (page == 4) summary.Text = WizardLogic.Summary(work, detected != null && detected.Error == null ? detected.OtherScreen : "");
         }
 
@@ -213,6 +258,12 @@ namespace ScreenSwitch
         readonly ListBox monitorList = new ListBox { Width = 560, Height = 110 };
         // 与 monitorList 的行一一对应：那一行显示器的完整设备路径；不应答 DDC/CI 的行为 null（不能作主屏）
         readonly List<string> monitorIds = new List<string>();
+        // 列表里列出的显示器（最近一次不指定主屏的检测）；换语言时按它重写各行
+        List<SetupMonitor> listed = new List<SetupMonitor>();
+        // 正在重写列表：这期间的 SelectedIndexChanged 不算用户点的
+        bool fillingList;
+        // 还没回来的检测有几个
+        int detecting;
         readonly Label mainInfo = Ui.Line("");
 
         Control MainPage()
@@ -221,14 +272,6 @@ namespace ScreenSwitch
             col.Controls.Add(monitorList);
             col.Controls.Add(mainInfo);
             col.Controls.Add(Ui.Button(Tr.T("ports.detect"), delegate { StartDetect(null); }));
-            monitorList.SelectedIndexChanged += delegate
-            {
-                if (detected == null || detected.Candidates.Count < 2) return;
-                // 按列表那一行记下的完整设备路径（同型号的两块，点哪块就是哪块），不按重新探测后的 detected
-                // ——那里的顺序和块数可能已经变了
-                string id = WizardLogic.PickedMonitor(monitorIds, monitorList.SelectedIndex);
-                if (id != null) StartDetect(id);
-            };
             return col;
         }
 
@@ -236,30 +279,51 @@ namespace ScreenSwitch
         {
             mainInfo.Text = Tr.T("wizard.main.detecting");
             DetectResult r = null;
+            detecting++;
             Background(delegate { r = svc.Probe(model); }, delegate
             {
+                detecting--;
                 detected = r;
                 if (model == null)
                 {
-                    // 先清掉行标识再清列表：清列表会触发 SelectedIndexChanged
-                    monitorIds.Clear();
-                    monitorList.Items.Clear();
-                    var ids = new List<string>();
-                    foreach (SetupMonitor m in r.Monitors) ids.Add(m.DeviceId);
-                    foreach (SetupMonitor m in r.Monitors)
-                    {
-                        monitorIds.Add(m.Ddc ? m.DeviceId : null);
-                        monitorList.Items.Add(Setup.MainEdidFor(m.DeviceId, ids) + "  " + m.Name + "  —  " + (m.Ddc ? Tr.T("wizard.main.ddc-yes") : Tr.T("wizard.main.ddc-no")));
-                    }
+                    listed = r.Monitors;
+                    FillMonitorList(false);
                 }
-                if (r.Error != null)
-                {
-                    mainInfo.Text = r.Candidates.Count > 1 ? Tr.T("wizard.main.pick") : r.Error;
-                    return;
-                }
-                mainInfo.Text = Tr.T("wizard.main.self", Ports.Label(r.SelfCode)) + "\n"
-                    + (r.Layout == "none" ? Tr.T("wizard.main.only") : r.OtherScreen.Length == 0 ? "" : Tr.T("wizard.main.other", r.OtherScreen));
+                ShowDetected(r);
             });
+        }
+
+        // 按 listed 重写列表；keepSelection：保留选中的那一行（换语言时）
+        void FillMonitorList(bool keepSelection)
+        {
+            int selected = monitorList.SelectedIndex;
+            fillingList = true;
+            try
+            {
+                // 先清掉行标识再清列表：清列表会触发 SelectedIndexChanged
+                monitorIds.Clear();
+                monitorList.Items.Clear();
+                var ids = new List<string>();
+                foreach (SetupMonitor m in listed) ids.Add(m.DeviceId);
+                foreach (SetupMonitor m in listed)
+                {
+                    monitorIds.Add(m.Ddc ? m.DeviceId : null);
+                    monitorList.Items.Add(Setup.MainEdidFor(m.DeviceId, ids) + "  " + m.Name + "  —  " + (m.Ddc ? Tr.T("wizard.main.ddc-yes") : Tr.T("wizard.main.ddc-no")));
+                }
+                if (keepSelection && selected >= 0 && selected < monitorList.Items.Count) monitorList.SelectedIndex = selected;
+            }
+            finally { fillingList = false; }
+        }
+
+        void ShowDetected(DetectResult r)
+        {
+            if (r.Error != null)
+            {
+                mainInfo.Text = r.Candidates.Count > 1 ? Tr.T("wizard.main.pick") : r.Error;
+                return;
+            }
+            mainInfo.Text = Tr.T("wizard.main.self", Ports.Label(r.SelfCode)) + "\n"
+                + (r.Layout == "none" ? Tr.T("wizard.main.only") : r.OtherScreen.Length == 0 ? "" : Tr.T("wizard.main.other", r.OtherScreen));
         }
 
         Control PortsPage()
@@ -291,7 +355,7 @@ namespace ScreenSwitch
         Control PeerPage()
         {
             var col = Page(Tr.T("wizard.peer.title"), Tr.T("wizard.peer.text"));
-            peerPanel.SetValues(work, "");
+            // peerPanel 由调用方新建并填好（构造时按工作配置，换语言时搬旧面板的内容）
             peerPanel.AuthorizeClicked += delegate
             {
                 string theirs = peerPanel.PeerKeyBox.Text, err = null, output;
@@ -331,7 +395,7 @@ namespace ScreenSwitch
         void LoadKey()
         {
             string key = null;
-            Background(delegate { key = svc.PublicKey(); }, delegate { peerPanel.MyKeyBox.Text = key ?? ""; });
+            Background(delegate { key = svc.PublicKey(); }, delegate { peerPanel.MyKey = key; });
         }
 
         Control DonePage()

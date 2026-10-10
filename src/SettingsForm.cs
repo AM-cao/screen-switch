@@ -26,7 +26,6 @@ namespace ScreenSwitch
         public SettingsForm(SettingsService svc, ITrayHost host)
         {
             this.svc = svc; this.host = host;
-            Text = Tr.T("settings.title");
             Font = Ui.Font;
             ClientSize = new Size(640, 560);
             MinimumSize = new Size(560, 420);
@@ -45,16 +44,27 @@ namespace ScreenSwitch
             foreach (TabPage p in tabs.TabPages) if ((string)p.Tag == name) tabs.SelectedTab = p;
         }
 
-        // 重新读配置，整页重画（设置写入后、或别处改了配置后调用）
+        public string SelectedTabName { get { return tabs.SelectedTab == null ? TabPorts : (string)tabs.SelectedTab.Tag; } }
+
+        public string TabTitle(string name)
+        {
+            foreach (TabPage p in tabs.TabPages) if ((string)p.Tag == name) return p.Text;
+            return null;
+        }
+
+        public bool AdvancedOpen { get { return advancedOpen; } set { advancedOpen = value; } }
+
+        // 重新读配置，整个窗口重画（设置写入后、别处改了配置后、换了界面语言后调用）；选中的标签页和"高级"的展开状态不变
         public void Rebuild()
         {
-            string current = tabs.SelectedTab == null ? TabPorts : (string)tabs.SelectedTab.Tag;
+            string current = SelectedTabName;
             Build();
             ShowTab(current);
         }
 
         void Build()
         {
+            Text = Tr.T("settings.title");
             tabs.SuspendLayout();
             foreach (TabPage p in tabs.TabPages) p.Dispose();
             tabs.TabPages.Clear();
@@ -221,7 +231,7 @@ namespace ScreenSwitch
             var panel = new PeerPanel();
             string key = null;
             panel.SetValues(c, "");
-            Background(panel, delegate { key = svc.PublicKey(); }, delegate { panel.MyKeyBox.Text = key ?? ""; });
+            Background(panel, delegate { key = svc.PublicKey(); }, delegate { panel.MyKey = key; });
             panel.FieldsCommitted += delegate
             {
                 if (panel.PeerHost.Length == 0 || panel.PeerUser.Length == 0) return;
@@ -377,6 +387,7 @@ namespace ScreenSwitch
                 if (err != null) Ui.Error(status, err);
             };
             col.Controls.Add(auto);
+            col.Controls.Add(LanguageRow(c));
             col.Controls.Add(Ui.Button(Tr.T("general.wizard"), delegate { host.RunWizard(); }));
             col.Controls.Add(Ui.Button(Tr.T("general.log"), delegate { host.OpenLog(); }));
             col.Controls.Add(Ui.Note(Tr.T("general.version", AppInfo.Version)));
@@ -406,6 +417,26 @@ namespace ScreenSwitch
             }));
             col.Controls.Add(adv);
             return col;
+        }
+
+        // 界面语言：跟随系统 / 中文 / English。写入配置后由托盘程序换语言，整个窗口随后重画（不在这个处理里重画）
+        Control LanguageRow(Config c)
+        {
+            string[] values = { "auto", "zh", "en" };
+            var row = Ui.Row();
+            row.Controls.Add(new Label { Text = Tr.T("general.language"), AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 7, 12, 0) });
+            var box = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 160 };
+            box.Items.AddRange(new object[] { Tr.T("general.language.auto"), Tr.T("general.language.zh"), Tr.T("general.language.en") });
+            box.SelectedIndex = Math.Max(0, Array.IndexOf(values, Tr.Setting(c.UiLanguage)));
+            box.SelectionChangeCommitted += delegate
+            {
+                string v = values[Math.Max(0, box.SelectedIndex)];
+                string err = svc.SetOption("language", new string[] { v });
+                Done(err, TabGeneral);
+                if (err == null) host.LanguageChanged(v);
+            };
+            row.Controls.Add(box);
+            return row;
         }
     }
 }
