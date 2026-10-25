@@ -13,7 +13,7 @@
 #   status                    输出 owned=1|0 与诊断信息
 #   request give peer         供对方 SSH 调用：请本机把主屏切给对方。0 已接受 / 2 未占有 / 3 守护进程未运行
 #   request give code <n>     供对方 SSH 调用：请本机把主屏切到编码为 n 的设备；设备列表里没有时 1
-#   request take              供对方 SSH 调用：对方即将把主屏切给本机，本机预先恢复布局
+#   request take              供对方 SSH 调用：对方即将把主屏切给本机，本机预先恢复布局（等布局应用完再返回）
 #   request info              供对方 SSH 调用：本机的编码、名字、设备列表
 #   menu-info                 菜单栏程序读取：名字、设备、快捷键、布局模式
 #   watch                     守护进程（launchd 调用）
@@ -157,8 +157,17 @@ say_done() {
     echo "$(t cmd.ok)"
 }
 
-# 软件切不回来时提示用户的话（主屏停在别的设备上时，只有显示器按钮能切回来）
-HINT_BUTTON=$(t mac.hint.button)
+# 软件切不回来时提示用户的话（主屏停在别的设备上时，只有显示器按钮能切回来）。用到时才查表：
+# 以前在脚本一启动就算，ssh-gate 的每个请求都要为此多跑一遍 sed、defaults 和 awk
+hint_button() {
+    t mac.hint.button
+}
+
+# 在父进程里把界面语言算好（$(t …) 跑在子 shell 里，缓存写不回来）；request / ssh-gate 不输出给人看的文字，不算
+ui_init() {
+    [ -n "$UI_COL" ] && return 0
+    if [ "$(ui_lang)" = zh ]; then UI_COL=2; else UI_COL=3; fi
+}
 
 # ---- 运行时状态 ----
 MODE=cli            # daemon | direct | cli
@@ -178,15 +187,28 @@ LAYOUT_AT=0         # 最近一次拿回完成的时刻（Unix 秒），SETTLE_S
 TAKE_PENDING=0      # 1 = 拿回时主屏不在系统拓扑里，布局还没应用，等主屏回来再应用
 PENDING_SEEN=0      # 待拿回期间连续几拍看到主屏回到拓扑
 UNMIRRORED_SINCE=0  # 未占有时从何时起看到主屏在线却不是镜像（Unix 秒）；0 = 没看到
+GIVE_FROM_PEER=0    # 1 = 正在执行的切换是对方用 request give 请求的（它已预先拿回，不必再回发 request take）
+LID_CACHE=""        # apply_layout 期间缓存的盖子状态（1 合着 / 0 开着）；空 = 每次问 ioreg
+DP_LIST=""          # apply_layout 期间缓存的一次 displayplacer list 输出；空 = 每次重新读
+FLOW_TICK=0         # flow_sleep 的计数，0.1 秒一跳时每 5 跳刷新一次状态文件
 
 # ---------------------------------------------------------------- 基础
+
+# 日志时间戳到毫秒（对照 Windows 端的毫秒级日志排查切换耗时）；系统自带的 perl 启动约 20 毫秒，与 date 相当。没有 perl 时退回到秒
+log_stamp() {
+    if [ -x /usr/bin/perl ]; then
+        /usr/bin/perl -MTime::HiRes=time -MPOSIX=strftime -e '$t = time; printf "%s.%03d", strftime("%Y-%m-%d %H:%M:%S", localtime $t), ($t - int $t) * 1000'
+    else
+        date '+%Y-%m-%d %H:%M:%S'
+    fi
+}
 
 log() {
     [ -d "$SCREENCTL_DIR" ] || mkdir -p "$SCREENCTL_DIR"
     local size
     size=$(stat -f %z "$LOG" 2>/dev/null || echo 0)
     [ "$size" -gt 1048576 ] && mv -f "$LOG" "$LOG.1"
-    printf '%s [%s %s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$MODE" "$$" "$*" >> "$LOG"
+    printf '%s [%s %s] %s\n' "$(log_stamp)" "$MODE" "$$" "$*" >> "$LOG"
 }
 
 # 菜单栏程序在运行时交给它弹通知：launchd 拉起的后台进程用 osascript 发的通知，
@@ -354,7 +376,13 @@ ddc_owned_now() {
 
 # 盖子是否合着（只有 MacBook 有这个状态；读不到当作开着）
 lid_closed() {
+    if [ -n "$LID_CACHE" ]; then [ "$LID_CACHE" = 1 ]; return; fi
     "$IOREG" -r -k AppleClamshellState -d 1 2>/dev/null | grep -q '"AppleClamshellState" = Yes'
+}
+
+# displayplacer list 的输出：apply_layout 里同一轮检查共用一次读取（DP_LIST），其他时候每次重新读
+dp_list() {
+    if [ -n "$DP_LIST" ]; then printf '%s\n' "$DP_LIST"; else "$DISPLAYPLACER" list 2>/dev/null; fi
 }
 
 # 另一块屏此刻在不在线：按 uuid（= displayplacer id）在 display-helper 里找；没有 helper 时问 displayplacer
@@ -380,9 +408,10 @@ want_layout() {
 
 # 输出 none（不做布局操作）/ mirror / extend / external（主屏在、另一块屏关闭）/ absent（主屏不在系统拓扑里）
 layout_mode() {
-    local line
+    local out line
     no_layout && { echo none; return; }
-    line=$("$DISPLAYPLACER" list 2>/dev/null | tail -1)
+    out=$(dp_list)
+    line=${out##*$'\n'}
     case "$line" in
         *"+$MAIN_ID"*|*"$MAIN_ID+"*) echo mirror ;;
         *"$MAIN_ID"*)
@@ -392,7 +421,7 @@ layout_mode() {
 }
 
 laptop_enabled() {
-    "$DISPLAYPLACER" list 2>/dev/null | grep -q "^Persistent screen id: $SECOND_ID\$"
+    dp_list | grep -q "^Persistent screen id: $SECOND_ID\$"
 }
 
 # 主屏的系统显示编号：按 uuid（= MAIN_ID）找，另接的显示器不算；旧版 display-helper 不输出 uuid，取第一块外接屏
@@ -417,9 +446,10 @@ laptop_set() {
     if [ "$1" = enable ]; then
         laptop_enabled && return 0
         "$DISPLAY_HELPER" enable "${LAPTOP_CGID:-1}" >> "$LOG" 2>&1
-        for i in 1 2 3 4 5 6 7 8 9 10; do
+        DP_LIST=""
+        for ((i = 0; i < 50; i++)); do
             laptop_enabled && { log "layout: 已打开笔记本屏"; return 0; }
-            sleep 0.5
+            sleep 0.1
         done
         LAYOUT_ERR=$(t mac.err.laptopNoRestore)
         return 1
@@ -429,9 +459,10 @@ laptop_set() {
     is_int "$id" || { LAYOUT_ERR=$(t mac.err.noLaptopId); return 1; }
     remember_laptop_cgid "$id"
     "$DISPLAY_HELPER" disable "$id" >> "$LOG" 2>&1 || { LAYOUT_ERR=$(t mac.err.laptopOffFailed); return 1; }
-    for i in 1 2 3 4 5 6 7 8 9 10; do
+    DP_LIST=""
+    for ((i = 0; i < 50; i++)); do
         laptop_enabled || { log "layout: 已关闭笔记本屏"; return 0; }
-        sleep 0.5
+        sleep 0.1
     done
     LAYOUT_ERR=$(t mac.err.laptopStillOn)
     return 1
@@ -488,9 +519,10 @@ laptop_solo() {
     else
         "$DISPLAY_HELPER" solo "$lap" "$ext" >> "$LOG" 2>&1 || return 1
     fi
-    for i in 1 2 3 4 5 6; do
+    DP_LIST=""
+    for ((i = 0; i < 30; i++)); do
         [ "$(layout_mode)" = external ] && { log "layout: 已从镜像直接进入仅大屏"; return 0; }
-        sleep 0.5
+        sleep 0.1
     done
     return 1
 }
@@ -502,9 +534,10 @@ laptop_mirror_on() {
     ext=$(main_cgid)
     is_int "$ext" || return 1
     "$DISPLAY_HELPER" enable-mirror "${LAPTOP_CGID:-1}" "$ext" >> "$LOG" 2>&1 || return 1
-    for i in 1 2 3 4 5 6; do
+    DP_LIST=""
+    for ((i = 0; i < 30; i++)); do
         [ "$(layout_mode)" = mirror ] && { log "layout: 已打开笔记本屏并镜像"; return 0; }
-        sleep 0.5
+        sleep 0.1
     done
     return 1
 }
@@ -512,7 +545,23 @@ laptop_mirror_on() {
 # $1 = extend | external | mirror；应用并校验。返回 0 成功；2 = 主屏不在系统拓扑里，什么都没做（只保证笔记本屏开着，
 # 镜像时笔记本屏开不了返回 1）；1 失败，LAYOUT_ERR 给出原因。进入镜像或扩展前一律先打开笔记本屏。
 # 不做布局操作时（只有主屏、合着盖子等，见 no_layout）直接算成功。
+# 盖子状态与 displayplacer list 在这一轮检查里只读一次（LID_CACHE、DP_LIST），应用前清掉，校验时读新的
 apply_layout() {
+    local rc
+    LID_CACHE=""
+    if [ "$LAYOUT" != none ] && [ "$SECOND_BUILTIN" = 1 ]; then
+        if lid_closed; then LID_CACHE=1; else LID_CACHE=0; fi
+    fi
+    DP_LIST=""
+    if [ "$LAYOUT" != none ] && [ "$LID_CACHE" != 1 ]; then DP_LIST=$("$DISPLAYPLACER" list 2>/dev/null); fi
+    apply_layout_checked "$@"
+    rc=$?
+    LID_CACHE=""
+    DP_LIST=""
+    return $rc
+}
+
+apply_layout_checked() {
     local want=$1 mode i
     mode=$(layout_mode)
     [ "$mode" = none ] && return 0
@@ -546,15 +595,17 @@ apply_layout() {
         return 1
     }
     laptop_set enable || return 1
+    log "layout: 应用 $want（当前 $mode）"
+    DP_LIST=""
     case "$want" in
         mirror) "$DISPLAYPLACER" "${MIRROR_ARGS[@]}" >> "$LOG" 2>&1 ;;
         *)      "$DISPLAYPLACER" "${EXTEND_ARGS[@]}" >> "$LOG" 2>&1 ;;
     esac
-    for i in 1 2 3 4 5 6; do
+    for ((i = 0; i < 30; i++)); do
         mode=$(layout_mode)
         [ "$mode" = mirror ] && [ "$want" = mirror ] && return 0
         [ "$mode" = extend ] && [ "$want" != mirror ] && break
-        sleep 0.5
+        sleep 0.1
     done
     if [ "$want" = external ] && [ "$mode" = extend ]; then
         laptop_set disable && return 0
@@ -639,25 +690,27 @@ do_release() {
 
 # ---------------------------------------------------------------- 主动切换流程
 
-# 流程中的一拍：刷新状态文件（否则对端 request 会因时间戳过期拿到 3），
-# 并丢弃期间到达的命令——重复触发不排队。
+# 流程中的一跳（$1 = 秒数，默认 0.5）：刷新状态文件（否则对端 request 会因时间戳过期拿到 3），
+# 并丢弃期间到达的命令——重复触发不排队。0.1 秒一跳时状态文件每 5 跳刷新一次就够
 flow_sleep() {
-    write_state
+    local d=${1:-0.5}
+    FLOW_TICK=$((FLOW_TICK + 1))
+    if [ "$d" = 0.5 ] || [ $((FLOW_TICK % 5)) -eq 0 ]; then write_state; fi
     if [ "$MODE" = daemon ] && [ -f "$CMD" ]; then
         local c
         c=$(head -1 "$CMD" 2>/dev/null)
         # 改配置的命令（reload、set、save-layout）留着，流程结束后照常处理
-        case "$c" in reload|"set "*|save-layout) sleep 0.5; return ;; esac
+        case "$c" in reload|"set "*|save-layout) sleep "$d"; return ;; esac
         rm -f "$CMD"
         log "busy: 忽略 [$c]"
         notify "$(t mac.notify.busy)"
     fi
-    sleep 0.5
+    sleep "$d"
 }
 
-# 写 DDC 后最多约 SWITCH_WAIT 秒内等到连续 DEBOUNCE 次读取失败
+# 写 DDC 后最多约 SWITCH_WAIT 秒内等到连续 DEBOUNCE 次读取失败；0.1 秒读一次，显示器一切走就让出
 wait_read_fail() {
-    local fails=0 i n=$((SWITCH_WAIT * 2))
+    local fails=0 i n=$((SWITCH_WAIT * 10))
     for ((i = 0; i < n; i++)); do
         if ddc_read; then
             fails=0
@@ -665,7 +718,7 @@ wait_read_fail() {
             fails=$((fails + 1))
             [ $fails -ge $DEBOUNCE ] && return 0
         fi
-        flow_sleep
+        flow_sleep 0.1
     done
     log "wait: 读取未转为失败（$LAST_READ）"
     return 1
@@ -704,8 +757,15 @@ give_aborted() {
 # 由 layout_failed 通知（提示合上再打开盖子）并按 LAYOUT_RETRY_SECS 退避重试，直到笔记本屏打开
 give_to_code() {
     local code=$1 name=$2
-    # 切给对方时先通知它预先恢复布局：它切布局的时间正好与下面的显示器切换重叠
-    [ "$3" = peer ] && notify_peer_take
+    # 切给对方时先通知它预先恢复布局：它切布局的时间正好与下面的显示器切换重叠。
+    # 对方自己用 request give 请求的切换不用通知：它发请求前已经预先拿回了，再发一次只是白等一趟 SSH
+    if [ "$3" = peer ]; then
+        if [ "$GIVE_FROM_PEER" = 1 ]; then
+            log "give: $name 自己请求的切换，不回发 request take"
+        else
+            notify_peer_take
+        fi
+    fi
     log "give: 写入 $name ($code)"
     if ! ddc_write "$code"; then
         notify "$(t mac.notify.ddcWriteFailed)"
@@ -814,11 +874,11 @@ take_back() {
         direct_result fail
     fi
     case $rc in
-        -1) notify "$(t mac.notify.noPeerTake "$HINT_BUTTON")" ;;
-        2) notify "$(t mac.notify.peerNotOwner "$PEER_NAME" "$HINT_BUTTON")" ;;
-        3) notify "$(t mac.notify.peerDaemonDown "$PEER_NAME" "$HINT_BUTTON")" ;;
-        255) notify "$(t mac.notify.peerUnreachable "$PEER_NAME" "$HINT_BUTTON")" ;;
-        *) notify "$(t mac.notify.peerRefused "$PEER_NAME" "$rc" "$HINT_BUTTON")" ;;
+        -1) notify "$(t mac.notify.noPeerTake "$(hint_button)")" ;;
+        2) notify "$(t mac.notify.peerNotOwner "$PEER_NAME" "$(hint_button)")" ;;
+        3) notify "$(t mac.notify.peerDaemonDown "$PEER_NAME" "$(hint_button)")" ;;
+        255) notify "$(t mac.notify.peerUnreachable "$PEER_NAME" "$(hint_button)")" ;;
+        *) notify "$(t mac.notify.peerRefused "$PEER_NAME" "$rc" "$(hint_button)")" ;;
     esac
     return 1
 }
@@ -852,9 +912,9 @@ ask_device() {
         return 0
     fi
     case $rc in
-        -1) notify "$(t mac.notify.noPeerDevice "$name" "$HINT_BUTTON")" ;;
+        -1) notify "$(t mac.notify.noPeerDevice "$name" "$(hint_button)")" ;;
         1) notify "$(t mac.notify.peerNoDevice "$PEER_NAME" "$name" "$code")" ;;
-        2) notify "$(t mac.notify.nobodyOwns "$HINT_BUTTON")" ;;
+        2) notify "$(t mac.notify.nobodyOwns "$(hint_button)")" ;;
         3) notify "$(t mac.notify.peerDaemonDownDevice "$PEER_NAME" "$name")" ;;
         255) notify "$(t mac.notify.peerUnreachableDevice "$PEER_NAME" "$name")" ;;
         *) notify "$(t mac.notify.peerRefusedShort "$PEER_NAME" "$rc")" ;;
@@ -869,7 +929,7 @@ give_peer_unowned() {
         ddc_write "$CODE_PEER"
         switched_to "$CODE_PEER" && { log "give: 直接切换生效"; return 0; }
     fi
-    notify "$(t mac.notify.notOwnedGivePeer "$PEER_NAME" "$HINT_BUTTON")"
+    notify "$(t mac.notify.notOwnedGivePeer "$PEER_NAME" "$(hint_button)")"
     return 1
 }
 
@@ -907,14 +967,14 @@ ssh_peer() {
     "$SSH_BIN" "${args[@]}" "$PEER_USER@$PEER_HOST" "$PEER_PROG $*" \
         > "$SCREENCTL_DIR/.relay.out" 2>&1 < /dev/null &
     pid=$!
-    limit=$((total * 2))
+    limit=$((total * 10))
     while kill -0 "$pid" 2>/dev/null; do
         if [ $waited -ge $limit ]; then
             kill "$pid" 2>/dev/null
             timed_out=1
             break
         fi
-        flow_sleep
+        flow_sleep 0.1
         waited=$((waited + 1))
     done
     wait "$pid"
@@ -1025,7 +1085,7 @@ busy_by_other() {
 
 # ---------------------------------------------------------------- 守护进程
 
-# 主屏在线且不在镜像组里（扩展或仅大屏）。用 display-helper（约 40 毫秒），不用 displayplacer list（约 1.2 秒），
+# 主屏在线且不在镜像组里（扩展或仅大屏）。用 display-helper（约 40 毫秒），不用 displayplacer list（有时要 1 秒以上），
 # 未占有时每拍都能查；按 UUID（= MAIN_ID）认主屏，另接的显示器不算。旧版 display-helper 不输出这两项，一律返回 1（不检查）
 main_unmirrored() {
     [ -x "$DISPLAY_HELPER" ] && [ -n "$MAIN_ID" ] || return 1
@@ -1117,7 +1177,7 @@ poll() {
             if [ $GRACE_UNTIL -gt 0 ]; then
                 GRACE_UNTIL=0
                 log "poll: 宽限期满仍读不到主屏，让出"
-                notify "$(t mac.notify.peerDidNotReturn "$PEER_NAME" "$HINT_BUTTON")"
+                notify "$(t mac.notify.peerDidNotReturn "$PEER_NAME" "$(hint_button)")"
             fi
             log "poll: release（$LAST_READ）"
             do_release
@@ -1170,15 +1230,19 @@ check_cmd() {
     rm -f "$CMD"
     log "cmd: [$c]"
     case "$c" in
-        "give "*)
-            # 内容为 give peer / give self / give code <n>；旧版的 give windows|mac|other 由 canon_target 换算
-            if canon_target ${c#give }; then
+        "give "*|"request-give "*)
+            # 内容为 give peer / give self / give code <n>；旧版的 give windows|mac|other 由 canon_target 换算。
+            # request-give … 是对方经 request give 请求的，切给它时不再回发 request take
+            GIVE_FROM_PEER=0
+            case "$c" in "request-give "*) GIVE_FROM_PEER=1 ;; esac
+            if canon_target ${c#* }; then
                 busy_begin
                 run_give $CANON
                 busy_end
             else
                 log "cmd: 不认识的目标，忽略"
             fi
+            GIVE_FROM_PEER=0
             ;;
         take)
             busy_begin; do_take; busy_end ;;
@@ -1194,7 +1258,7 @@ check_cmd() {
         "set "*)
             do_set $(printf '%s' "${c#set }") ;;
         reload)
-            load_config; log "reload: 已重新读取配置" ;;
+            load_config; UI_COL=""; ui_init; log "reload: 已重新读取配置" ;;
         release)
             busy_begin; do_release; busy_end ;;
         *)
@@ -1245,25 +1309,31 @@ cmd_watch() {
     trap watch_cleanup EXIT
     trap 'exit 0' TERM INT HUP
     log "watch 启动"
+    ui_init
     # 上次直接模式的流程还没结束就等它结束
     while busy_by_other; do sleep 0.5; done
     rm -f "$BUSY" "$CMD"
     reconcile
     NEXT_POLL=$POLL_TICKS
+    # 命令文件 0.1 秒查一次（菜单和对方的请求尽快被拾起）；DDC 轮询与状态文件仍是 0.5 秒一拍
+    local sub=0
     while :; do
         check_cmd
-        if [ $NEXT_POLL -le 1 ]; then
-            poll
-            SAVE_COUNTDOWN=$((SAVE_COUNTDOWN - 1))
-            if [ $SAVE_COUNTDOWN -le 0 ]; then
-                SAVE_COUNTDOWN=$AUTO_SAVE_POLLS
-                auto_save_check
+        if [ $sub -eq 0 ]; then
+            if [ $NEXT_POLL -le 1 ]; then
+                poll
+                SAVE_COUNTDOWN=$((SAVE_COUNTDOWN - 1))
+                if [ $SAVE_COUNTDOWN -le 0 ]; then
+                    SAVE_COUNTDOWN=$AUTO_SAVE_POLLS
+                    auto_save_check
+                fi
+            else
+                NEXT_POLL=$((NEXT_POLL - 1))
             fi
-        else
-            NEXT_POLL=$((NEXT_POLL - 1))
+            write_state
         fi
-        write_state
-        sleep 0.5
+        sub=$(( (sub + 1) % 5 ))
+        sleep 0.1
     done
 }
 
@@ -1329,7 +1399,7 @@ cmd_request() {
         rm -f "$SCREENCTL_DIR/pretake.result"
         write_cmd "pre-take"
         log "request: 已接受 take"
-        for i in $(seq 1 $(( ${PRETAKE_WAIT_SECS:-3} * 4 ))); do
+        for ((i = 0; i < ${PRETAKE_WAIT_SECS:-3} * 10; i++)); do
             rs=""; ts2=""
             read -r rs ts2 2>/dev/null < "$SCREENCTL_DIR/pretake.result"
             if [ -n "$rs" ] && is_int "$ts2" && [ "$ts2" -ge "$t0" ]; then
@@ -1337,7 +1407,7 @@ cmd_request() {
                 echo "$rs"
                 exit 0
             fi
-            sleep 0.25
+            sleep 0.1
         done
         log "request: take → 0（等了 ${PRETAKE_WAIT_SECS:-3} 秒布局还没应用完，守护进程继续）"
         echo "accepted"
@@ -1349,7 +1419,8 @@ cmd_request() {
         echo "not owned"
         exit 2
     fi
-    write_cmd "give $*"
+    # 带 request- 前缀：守护进程据此不再向对方回发 request take（对方发请求前已预先拿回）
+    write_cmd "request-give $*"
     log "request: 已接受 give $*"
     echo "accepted"
     exit 0
@@ -2072,11 +2143,11 @@ reload_daemon() {
 # 写命令文件：前一条还没被守护进程取走时等它最多 3 秒（命令文件一次只放一条），同样的命令不重复写
 send_cmd() {
     local i c
-    for i in 1 2 3 4 5 6; do
+    for ((i = 0; i < 30; i++)); do
         [ -f "$CMD" ] || break
         c=$(head -1 "$CMD" 2>/dev/null)
         [ "$c" = "$1" ] && return 0
-        sleep 0.5
+        sleep 0.1
     done
     write_cmd "$1"
 }
@@ -2632,6 +2703,10 @@ $(t mac.usage.title "$0")
 EOF
 }
 
+case "${1:-}" in
+    request|ssh-gate|watch) ;;
+    *) ui_init ;;
+esac
 case "${1:-}" in
     detect|init) shift; cmd_detect "$@" ;;
     setup) shift; cmd_setup "$@" ;;

@@ -148,7 +148,7 @@ SECOND_BUILTIN=1                # 1 = 笔记本自带屏；0 = 外接屏
 
 状态文件内容一行：`owned=1` 或 `owned=0`，后跟空格和 Unix 时间戳，例如 `owned=1 1758500000`。守护进程每次轮询覆盖写入。
 
-命令文件内容一行：`give peer`、`give code <n>`、`give self`（本机拿回）或 `pre-take`。守护进程每 0.5 秒检查，读到后先删除文件再执行。旧内容 `give windows`、`give mac`、`give other` 按 5.3 的对应关系处理。
+命令文件内容一行：`give peer`、`give code <n>`、`give self`（本机拿回）或 `pre-take`；对方经 `request give` 请求的切换写成 `request-give peer` / `request-give code <n>`，执行时不再向对方回发 `request take`（它发请求前已经预先拿回了）。守护进程每 0.1 秒检查（Mac；Windows 每拍），读到后先删除文件再执行。旧内容 `give windows`、`give mac`、`give other` 按 5.3 的对应关系处理。
 
 ### 5.2 命令
 
@@ -217,8 +217,8 @@ proto=3 os=mac code=15 name=TWFjQm9vaw== devices=17:U3dpdGNo,18:UFM1
 **切给 B**（A 占有）：
 
 1. B 的编码未知：先 `request info` 取得并写回配置；仍未知则通知"不知道 <B> 接在哪个输入口，请运行设置"。
-2. 先向 B 发 `request take`（尽力而为，见 5.2）。
-3. 写 VCP 0x60 = B 的编码，等待不再占有（最多 3 秒）后让出。3 秒内仍占有则通知"切换未生效"，不改布局。
+2. 先向 B 发 `request take`（尽力而为，见 5.2）。这次切换是 B 用 `request give` 请求的时候跳过：B 已经预先拿回了。
+3. 写 VCP 0x60 = B 的编码，等待不再占有（最多 3 秒；Mac 每 0.1 秒读一次）后让出。3 秒内仍占有则通知"切换未生效"，不改布局。
 
 **切给设备**（A 占有）：写该设备的编码，最多等 3 秒确认不再占有，让出，再观察 15 秒；主屏自己跳回来（设备没开机，显示器自动回到有信号的口）就拿回并通知"没有检测到 <设备> 的信号"。很多显示器切到无信号的口后不会跳回，所以菜单上提示"请先打开设备"。
 

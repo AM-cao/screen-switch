@@ -84,12 +84,14 @@ expect_rc 1 $S request give foo
 expect_rc 0 $S request give peer
 t=$(wait_for 6 '[ "$(cat $FAKE_DIR/layout)" = mirror ]') && ok "request give peer → mirror ${t}s" || bad "give peer"
 [ "$(cat $FAKE_DIR/input)" = 16 ] && ok "DDC=16" || bad "DDC"
-grep -q 'ScreenSwitch.exe request take' $FAKE_DIR/ssh.log && ok "切给对方前先 SSH 通知它 request take" || bad "no request take in ssh.log"
+grep -q 'ScreenSwitch.exe request take' $FAKE_DIR/ssh.log && bad "对方请求的切换不该再回发 request take: $(cat $FAKE_DIR/ssh.log)" || ok "对方用 request give 请求的切换：不回发 request take（它已预先拿回）"
+grep -q "自己请求的切换，不回发 request take" $SCREENCTL_DIR/screenctl.log && ok "日志：对方自己请求的切换，不回发 request take" || bad "no skip log"
 wait_for 2 '[ "$(owned)" = owned=0 ]' >/dev/null && ok "owned=0" || bad "owned"
 expect_rc 2 $S request give peer
 [ -f $SCREENCTL_DIR/cmd ] && bad "cmd written when unowned" || ok "no cmd when unowned"
 
 echo "== 按钮跟随"
+sleep 3   # 启动对账拿回后的 3 秒稳定期（SETTLE_SECS）内不读 DDC；流程快了之后这里要先等它过去
 s=$(date +%s); echo 15 > $FAKE_DIR/input
 t=$(wait_for 6 '[ "$(cat $FAKE_DIR/layout)" = extend ]') && ok "button→Mac take ${t}s" || bad "take follow"
 [ "${t%%.*}" -le 1 ] && ok "未占有时每 0.5 秒轮询：${t}s 内拿回（设计 4.3）" || bad "unowned poll too slow: ${t}s"
@@ -176,6 +178,7 @@ chmod +x $FAKE_DIR/m1ddc-stuck
 stop_daemon; FAKE_M1DDC=$FAKE/m1ddc M1DDC=$FAKE_DIR/m1ddc-stuck start_daemon; sleep 1
 $S give peer >/dev/null; wait_for 6 '[ -s $SCREENCTL_NOTIFY_FILE ]' >/dev/null
 grep -q "切换未生效" $SCREENCTL_NOTIFY_FILE && [ "$(cat $FAKE_DIR/layout)" = extend ] && ok "未生效 → 通知且不改布局" || bad "stuck: $(cat $SCREENCTL_NOTIFY_FILE)"
+grep -q 'ScreenSwitch.exe request take' $FAKE_DIR/ssh.log && ok "本机自己点“切给对方”：先 SSH 通知它 request take" || bad "no request take in ssh.log: $(tail -3 $FAKE_DIR/ssh.log)"
 
 echo "== 单实例 / 守护进程停止后 request=3"
 $S watch >/dev/null 2>&1 & W2=$!; sleep 2; if kill -0 $W2 2>/dev/null; then kill $W2; bad "second watch 仍在运行"; else ok "第二个 watch 立即退出"; fi
@@ -405,9 +408,13 @@ stop_daemon
 
 echo "== ssh-gate"
 start_daemon; echo 15 > $FAKE_DIR/input; wait_for 6 '[ "$(owned)" = owned=1 ]' >/dev/null
-# 命令, 期望退出码, 期望输出。每次调用后立刻删掉命令文件，不让守护进程真的去切换
+# 下面检查的是命令文件的内容：守护进程 0.1 秒就会把它取走并真的去切换，所以先停掉它，状态文件手工保持新鲜（owned=1）
+stop_daemon
+fresh_state() { printf 'owned=1 %s\n' "$(date +%s)" > $SCREENCTL_DIR/state; }
+# 命令, 期望退出码, 期望输出。每次调用后删掉命令文件
 gate() {
   local out rc
+  fresh_state
   out=$(SSH_ORIGINAL_COMMAND="$1" $S ssh-gate 2>&1); rc=$?; rm -f $SCREENCTL_DIR/cmd
   [ $rc -eq $2 ] && [ "$out" = "$3" ] && ok "gate [$1] → $rc $out" || bad "gate [$1] → rc=$rc out=$out（期望 $2 $3）"
 }
@@ -426,14 +433,15 @@ gate '~/screenctl/screenctl.sh request give peer; id' 1 rejected
 gate '/bin/sh -c id screenctl.sh' 1 rejected
 gate '' 1 rejected
 gate '~/screenctl/screenctl.sh request info' 0 'proto=3 os=mac code=15 name=TWFjQm9vaw== devices=17:U3dpdGNo,18:UFM1'
-out=$(SSH_ORIGINAL_COMMAND='~/screenctl/screenctl.sh request take' $S ssh-gate 2>&1); rc=$?
+fresh_state; out=$(SSH_ORIGINAL_COMMAND='~/screenctl/screenctl.sh request take' $S ssh-gate 2>&1); rc=$?
 [ $rc -eq 0 ] && [ "$out" = "already owned" ] && ok "ssh-gate 放行 request take（已占有 → 0，不动）" || bad "gate take owned: rc=$rc $out"
 out=$(SSH_ORIGINAL_COMMAND='~/screenctl/screenctl.sh request take now' $S ssh-gate 2>&1); rc=$?
 [ $rc -eq 1 ] && [ "$out" = rejected ] && ok "ssh-gate 拒绝带多余参数的 request take" || bad "gate take extra: rc=$rc $out"
-# 命令文件里写的是规范写法
-SSH_ORIGINAL_COMMAND='~/screenctl/screenctl.sh request give other' $S ssh-gate >/dev/null 2>&1
+# 命令文件里写的是规范写法，并带 request- 前缀（对方请求的切换不回发 request take）
+fresh_state; SSH_ORIGINAL_COMMAND='~/screenctl/screenctl.sh request give other' $S ssh-gate >/dev/null 2>&1
 c=$(cat $SCREENCTL_DIR/cmd 2>/dev/null); rm -f $SCREENCTL_DIR/cmd
-[ "$c" = "give code 17" ] && ok "旧写法 give other 写成 give code 17（设备列表里的第一个）" || bad "cmd for other: [$c]"
+[ "$c" = "request-give code 17" ] && ok "旧写法 give other 写成 request-give code 17（设备列表里的第一个）" || bad "cmd for other: [$c]"
+start_daemon; wait_for 6 '[ "$(owned)" = owned=1 ]' >/dev/null
 echo 16 > $FAKE_DIR/input; wait_for 10 '[ "$(owned)" = owned=0 ]' >/dev/null
 out=$(SSH_ORIGINAL_COMMAND='~/screenctl/screenctl.sh request take' $S ssh-gate 2>&1); rc=$?
 [ $rc -eq 0 ] && [ "$out" = applied ] && ok "ssh-gate 放行 request take（未占有 → 0，等布局应用完返回 applied）" || bad "gate take unowned: rc=$rc $out"
