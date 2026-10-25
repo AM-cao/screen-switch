@@ -203,6 +203,15 @@ log_stamp() {
     fi
 }
 
+# 当前时刻，毫秒（流程里计时用）；没有 perl 时退回到秒
+now_ms() {
+    if [ -x /usr/bin/perl ]; then
+        /usr/bin/perl -MTime::HiRes=time -e 'printf "%d", time * 1000'
+    else
+        echo "$(( $(date +%s) * 1000 ))"
+    fi
+}
+
 log() {
     [ -d "$SCREENCTL_DIR" ] || mkdir -p "$SCREENCTL_DIR"
     local size
@@ -708,15 +717,25 @@ flow_sleep() {
     sleep "$d"
 }
 
-# 写 DDC 后最多约 SWITCH_WAIT 秒内等到连续 DEBOUNCE 次读取失败；0.1 秒读一次，显示器一切走就让出
+# 写 DDC 后最多 SWITCH_WAIT 秒内等到连续 DEBOUNCE 次读取失败；0.1 秒读一次，显示器一切走就让出。
+# $1 = 刚写入的编码：约 1.5 秒后仍读到本机就再写一次——实测（10-26 00:19）显示器偶尔不执行刚切换完几秒内的写入，
+# 那时每次读也要约 1 秒，所以按时间而不是按次数计
 wait_read_fail() {
-    local fails=0 i n=$((SWITCH_WAIT * 10))
-    for ((i = 0; i < n; i++)); do
+    local code=$1 fails=0 start elapsed rewrote=0
+    start=$(now_ms)
+    while :; do
         if ddc_read; then
             fails=0
         else
             fails=$((fails + 1))
             [ $fails -ge $DEBOUNCE ] && return 0
+        fi
+        elapsed=$(( $(now_ms) - start ))
+        [ $elapsed -lt $((SWITCH_WAIT * 1000)) ] || break
+        if [ $fails -eq 0 ] && [ $rewrote -eq 0 ] && [ -n "$code" ] && [ $elapsed -ge 1500 ]; then
+            rewrote=1
+            log "give: ${elapsed} 毫秒后仍读到本机，再写一次 ($code)"
+            ddc_write "$code"
         fi
         flow_sleep 0.1
     done
@@ -772,7 +791,7 @@ give_to_code() {
         give_aborted
         return 1
     fi
-    if ! wait_read_fail; then
+    if ! wait_read_fail "$code"; then
         notify "$(t mac.notify.switchNoEffect)"
         give_aborted
         return 1

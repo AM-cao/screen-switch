@@ -179,6 +179,7 @@ stop_daemon; FAKE_M1DDC=$FAKE/m1ddc M1DDC=$FAKE_DIR/m1ddc-stuck start_daemon; sl
 $S give peer >/dev/null; wait_for 6 '[ -s $SCREENCTL_NOTIFY_FILE ]' >/dev/null
 grep -q "切换未生效" $SCREENCTL_NOTIFY_FILE && [ "$(cat $FAKE_DIR/layout)" = extend ] && ok "未生效 → 通知且不改布局" || bad "stuck: $(cat $SCREENCTL_NOTIFY_FILE)"
 grep -q 'ScreenSwitch.exe request take' $FAKE_DIR/ssh.log && ok "本机自己点“切给对方”：先 SSH 通知它 request take" || bad "no request take in ssh.log: $(tail -3 $FAKE_DIR/ssh.log)"
+grep -q "毫秒后仍读到本机，再写一次 (16)" $SCREENCTL_DIR/screenctl.log && [ "$(grep -c "再写一次" $SCREENCTL_DIR/screenctl.log)" = 1 ] && ok "写后约 1.5 秒仍读到本机：再写一次，只补一次" || bad "no rewrite: $(grep -c 再写一次 $SCREENCTL_DIR/screenctl.log)"
 
 echo "== 单实例 / 守护进程停止后 request=3"
 $S watch >/dev/null 2>&1 & W2=$!; sleep 2; if kill -0 $W2 2>/dev/null; then kill $W2; bad "second watch 仍在运行"; else ok "第二个 watch 立即退出"; fi
