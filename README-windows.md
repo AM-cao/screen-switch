@@ -94,7 +94,7 @@ powershell -ExecutionPolicy Bypass -File .\setup-client.ps1 -PeerUser <对方的
 - 对方是 Mac：在 Mac 上运行 `~/screenctl/screenctl.sh authorize "<这台电脑的公钥>"`
 - 对方是 Windows：在对方的管理员 PowerShell 里运行 `setup-sshd.ps1 -PeerPubKey "<这台电脑的公钥>"`
 
-拿回主屏时，程序会先解析对方的地址（最多 3 秒）：解析成功就用它，并记到 `peer-address.txt`；解析失败就用上次成功的地址。mDNS 在 Wi-Fi 上偶尔会一段时间内没有回应，有了这个兜底，拿回主屏不受影响；对方换了 IP 后也能自动跟上。如果不方便让代理放行 `.local`，可以先在路由器上给对方做 DHCP 固定分配，再加上 `-PeerIP <对方的 IP>` 把名字固定到这个 IP。
+拿回主屏时，程序会先解析对方的地址（最多 3 秒，先查 A 记录，再用系统的通用解析）：解析成功就用它，并记到 `peer-address.txt`；解析失败就用记下的地址。对方每次经 SSH 连进来时，程序也会把它的来源地址记到这个文件里。mDNS 在 Wi-Fi 上偶尔会一段时间内没有回应，有了这个兜底，拿回主屏不受影响；对方换了 IP 后也能自动跟上。如果不方便让代理放行 `.local`，可以先在路由器上给对方做 DHCP 固定分配，再加上 `-PeerIP <对方的 IP>` 把名字固定到这个 IP。
 
 验证（应返回退出码 1、输出 `rejected`，说明能连通、认证成功、被对方的 ssh-gate 按规定拒绝，没有副作用）：
 
@@ -253,7 +253,7 @@ ssh -4 -o BatchMode=yes <对方的用户名>@<对方的主机名> status; $LASTE
 |---|---|
 | `prefs.json` | 菜单和设置窗口里的选择（拿回后的布局、自动记住屏幕排列），程序自动维护 |
 | `layout-owned.bin` | 双屏扩展布局快照 |
-| `peer-address.txt` | 上次成功连上对方时的地址，解析失败时兜底用 |
+| `peer-address.txt` | 对方最近的地址（上次解析成功，或对方上次连进来时），解析失败时兜底用 |
 | `direct-take.txt` | 直接切换在这块显示器上有没有成功过 |
 | `state.txt` / `cmd.txt` | 跨机协议的状态文件与命令文件 |
 | `screenswitch.log` | 日志 |

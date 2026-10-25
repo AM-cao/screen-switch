@@ -1,8 +1,11 @@
 using System;
+using System.Collections.Generic;
+using System.ComponentModel;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Threading;
 
 namespace ScreenSwitch
@@ -39,8 +42,73 @@ namespace ScreenSwitch
 
         public PeerAddress(Func<string, IPAddress[]> resolver, int timeoutMs)
         {
-            this.resolver = resolver != null ? resolver : new Func<string, IPAddress[]>(Dns.GetHostAddresses);
+            this.resolver = resolver != null ? resolver : Fallback(DnsQueryA, Dns.GetHostAddresses);
             this.timeoutMs = timeoutMs;
+        }
+
+        // Tries first; when it throws or returns no usable IPv4 address, returns what second gives.
+        // On this machine Dns.GetHostAddresses (getaddrinfo, any family) for the Mac's .local name
+        // often returns only its IPv6 addresses or "host not found", while a DNS query for the A record
+        // answers far more often; so the A query goes first and getaddrinfo is the backup. Both can fail
+        // for a while together: then the last-known address is used (see Learn).
+        public static Func<string, IPAddress[]> Fallback(Func<string, IPAddress[]> first, Func<string, IPAddress[]> second)
+        {
+            return delegate(string host)
+            {
+                try
+                {
+                    IPAddress[] a = first(host);
+                    if (FirstValid(a) != null) return a;
+                }
+                catch (Exception) { }
+                return second(host);
+            };
+        }
+
+        [DllImport("dnsapi.dll", CharSet = CharSet.Unicode, EntryPoint = "DnsQuery_W")]
+        static extern int DnsQuery(string name, ushort type, uint options, IntPtr extra, out IntPtr results, IntPtr reserved);
+        [DllImport("dnsapi.dll")]
+        static extern void DnsRecordListFree(IntPtr list, int freeType);
+
+        const ushort DNS_TYPE_A = 1;
+        const int DnsFreeRecordList = 1;
+
+        // A records of host through the Windows DNS client (mDNS for .local names).
+        // DNS_RECORD: pNext, pName, wType, wDataLength, Flags, dwTtl, dwReserved, then the data
+        // (for A: the IPv4 address in network order).
+        public static IPAddress[] DnsQueryA(string host)
+        {
+            IntPtr list;
+            int rc = DnsQuery(host, DNS_TYPE_A, 0, IntPtr.Zero, out list, IntPtr.Zero);
+            if (rc != 0) throw new Win32Exception(rc);
+            var result = new List<IPAddress>();
+            try
+            {
+                for (IntPtr p = list; p != IntPtr.Zero; p = Marshal.ReadIntPtr(p))
+                {
+                    if ((ushort)Marshal.ReadInt16(p, IntPtr.Size * 2) != DNS_TYPE_A) continue;
+                    byte[] b = new byte[4];
+                    Marshal.Copy(new IntPtr(p.ToInt64() + IntPtr.Size * 2 + 16), b, 0, 4);
+                    result.Add(new IPAddress(b));
+                }
+            }
+            finally { DnsRecordListFree(list, DnsFreeRecordList); }
+            return result.ToArray();
+        }
+
+        // The peer just connected to us over SSH: SSH_CONNECTION is "client_ip client_port server_ip server_port".
+        // Its client address is where the peer is right now, a fresher last-known address than an old
+        // resolve (its DHCP address changes). Written to the same cache the resolve falls back to.
+        // Returns whether the cache was written.
+        public static bool Learn(string cacheFilePath, string host, string sshConnection)
+        {
+            if (string.IsNullOrEmpty(host) || string.IsNullOrEmpty(sshConnection)) return false;
+            IPAddress literal;
+            if (IPAddress.TryParse(host, out literal)) return false;
+            string[] parts = sshConnection.Trim().Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            IPAddress ip;
+            if (parts.Length < 1 || !IPAddress.TryParse(parts[0], out ip) || !IsValidCandidate(ip)) return false;
+            return WriteCache(cacheFilePath, host, ip);
         }
 
         public PeerResolveResult Resolve(string host, string cacheFilePath)
@@ -131,7 +199,7 @@ namespace ScreenSwitch
             return (v & mask) == (network & mask);
         }
 
-        static void WriteCache(string path, string host, IPAddress ip)
+        static bool WriteCache(string path, string host, IPAddress ip)
         {
             try
             {
@@ -139,8 +207,9 @@ namespace ScreenSwitch
                 File.WriteAllText(tmp, host + " " + ip);
                 File.Copy(tmp, path, true);
                 File.Delete(tmp);
+                return true;
             }
-            catch (Exception) { }
+            catch (Exception) { return false; }
         }
 
         static IPAddress ReadCache(string path, string host)

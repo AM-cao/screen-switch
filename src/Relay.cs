@@ -23,6 +23,9 @@ namespace ScreenSwitch
         // 运行 ssh：参数、超时毫秒、标准输出、标准错误 → 退出码。测试里换成假的。
         public delegate int Runner(string args, int timeoutMs, out string stdout, out string stderr);
 
+        // 对方最近的地址：解析成功时记下，对方经 ssh-gate 连进来时也记下（见 Cli.SshGate）
+        public const string PeerAddressFile = "peer-address.txt";
+
         readonly Config cfg;
         readonly Log log;
         readonly PeerAddress peerAddress;
@@ -37,7 +40,7 @@ namespace ScreenSwitch
         {
             this.cfg = cfg; this.log = log;
             this.peerAddress = new PeerAddress();
-            this.peerAddressCachePath = Path.Combine(dir, "peer-address.txt");
+            this.peerAddressCachePath = Path.Combine(dir, PeerAddressFile);
             this.runner = runner ?? RunSshExe;
         }
 

@@ -23,7 +23,7 @@ namespace ScreenSwitch
                         if (File.Exists(old)) File.Delete(old);
                         File.Move(path, old);
                     }
-                    File.AppendAllText(path, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " [" + level + "] " + msg + Environment.NewLine);
+                    File.AppendAllText(path, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff") + " [" + level + "] " + msg + Environment.NewLine);
                 }
                 catch (Exception) { }
             }

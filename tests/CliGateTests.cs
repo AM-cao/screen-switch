@@ -58,6 +58,21 @@ namespace ScreenSwitch.Tests
             Directory.Delete(d, true);
         }
 
+        // 对方经 ssh-gate 连进来：放行的请求把它的来源地址记进 peer-address.txt，拿回主屏时解析失败也能连上
+        public static void Test_SshGate_LearnsPeerAddress()
+        {
+            string d = TempDir();
+            string cache = Path.Combine(d, "peer-address.txt");
+            StateFile.WriteState(d, false, 1000);
+            Assert.Eq(0, Cli.SshGate("C:\\x\\ScreenSwitch.exe request take", d, 1001, "192.168.0.31 50000 192.168.0.5 22"), "take accepted");
+            Assert.Eq("mac.local 192.168.0.31", File.ReadAllText(cache), "address learned");
+            Assert.Eq(1, Cli.SshGate("C:\\x\\ScreenSwitch.exe request rm -rf", d, 1001, "192.168.0.34 50000 192.168.0.5 22"), "rejected");
+            Assert.Eq("mac.local 192.168.0.31", File.ReadAllText(cache), "rejected request learns nothing");
+            Assert.Eq(0, Cli.SshGate("C:\\x\\ScreenSwitch.exe request info", d, 1001, "192.168.0.32 50000 192.168.0.5 22"), "info accepted");
+            Assert.Eq("mac.local 192.168.0.32", File.ReadAllText(cache), "info learns too");
+            Directory.Delete(d, true);
+        }
+
         public static void Test_SshGate_AcceptsRequestInfo()
         {
             string d = TempDir();

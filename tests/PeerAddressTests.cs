@@ -191,5 +191,53 @@ namespace ScreenSwitch.Tests
             }
             finally { if (File.Exists(cache)) File.Delete(cache); }
         }
+
+        // 系统解析：第一种方法（DNS A 记录）给出可用的 IPv4 就用它；只有 IPv6、抛异常时换第二种（getaddrinfo）
+        public static void Test_Fallback_UsesSecondWhenFirstHasNoIPv4()
+        {
+            bool secondCalled = false;
+            Func<string, IPAddress[]> second = delegate(string h) { secondCalled = true; return new IPAddress[] { IPAddress.Parse("192.168.0.32") }; };
+            var onlyV6 = PeerAddress.Fallback(delegate(string h) { return new IPAddress[] { IPAddress.Parse("fe80::1") }; }, second);
+            Assert.Eq("192.168.0.32", onlyV6("mac.local")[0].ToString(), "ipv6-only first -> second");
+            var throws = PeerAddress.Fallback(delegate(string h) { throw new Exception("rc=9003"); }, second);
+            Assert.Eq("192.168.0.32", throws("mac.local")[0].ToString(), "throwing first -> second");
+            secondCalled = false;
+            var good = PeerAddress.Fallback(delegate(string h) { return new IPAddress[] { IPAddress.Parse("192.168.0.31") }; }, second);
+            Assert.Eq("192.168.0.31", good("mac.local")[0].ToString(), "first with ipv4 wins");
+            Assert.True(!secondCalled, "second not called when first has ipv4");
+        }
+
+        // 对方经 SSH 连进来时的来源地址（SSH_CONNECTION 第一段）记成最近一次的地址
+        public static void Test_Learn_WritesClientAddressFromSshConnection()
+        {
+            string cache = TempCachePath();
+            try
+            {
+                File.WriteAllText(cache, "mac.local 192.168.0.33");
+                Assert.True(PeerAddress.Learn(cache, "mac.local", "192.168.0.31 51234 192.168.0.5 22"), "learned");
+                Assert.Eq("mac.local 192.168.0.31", File.ReadAllText(cache), "cache replaced");
+                var pa = new PeerAddress(delegate(string h) { throw new Exception("no dns"); }, 3000);
+                Assert.Eq("192.168.0.31", pa.Resolve("mac.local", cache).Ip.ToString(), "resolve failure falls back to learned");
+            }
+            finally { if (File.Exists(cache)) File.Delete(cache); }
+        }
+
+        public static void Test_Learn_IgnoresUnusableInput()
+        {
+            string cache = TempCachePath();
+            try
+            {
+                Assert.True(!PeerAddress.Learn(cache, "mac.local", null), "null");
+                Assert.True(!PeerAddress.Learn(cache, "mac.local", ""), "empty");
+                Assert.True(!PeerAddress.Learn(cache, "mac.local", "garbage"), "garbage");
+                Assert.True(!PeerAddress.Learn(cache, "mac.local", "127.0.0.1 5000 127.0.0.1 22"), "loopback");
+                Assert.True(!PeerAddress.Learn(cache, "mac.local", "169.254.3.4 5000 192.168.0.5 22"), "link-local");
+                Assert.True(!PeerAddress.Learn(cache, "mac.local", "fe80::1 5000 fe80::2 22"), "ipv6");
+                Assert.True(!PeerAddress.Learn(cache, "192.168.0.9", "192.168.0.31 5000 192.168.0.5 22"), "peer host is an ip literal");
+                Assert.True(!PeerAddress.Learn(cache, "", "192.168.0.31 5000 192.168.0.5 22"), "no peer host");
+                Assert.True(!File.Exists(cache), "nothing written");
+            }
+            finally { if (File.Exists(cache)) File.Delete(cache); }
+        }
     }
 }

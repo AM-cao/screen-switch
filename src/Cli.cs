@@ -103,6 +103,14 @@ namespace ScreenSwitch
         // 程序路径可以含空格或带引号：最后一个 request 之前的部分都算程序路径（它只用来核对名字，不会被执行）。
         public static int SshGate(string original, string dir, long now)
         {
+            return SshGate(original, dir, now, null);
+        }
+
+        // sshConnection：会话的 SSH_CONNECTION（"来源地址 来源端口 本机地址 本机端口"）。放行的请求顺便把来源地址
+        // 记成对方最近的地址（peer-address.txt）：对方的 DHCP 地址会变，本机解析它的 .local 名字又时好时坏，
+        // 拿回主屏时解析失败就用这个地址（见 PeerAddress）。
+        public static int SshGate(string original, string dir, long now, string sshConnection)
+        {
             string[] parts = original == null
                 ? new string[0]
                 : original.Trim().Split(new char[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
@@ -126,11 +134,19 @@ namespace ScreenSwitch
                 Console.WriteLine("rejected");
                 return 1;
             }
+            Config cfg = LoadConfig(dir);
+            LearnPeerAddress(dir, cfg, sshConnection);
             if (take) return RequestTake(dir, now);
-            if (info) return RequestInfo(LoadConfig(dir));
+            if (info) return RequestInfo(cfg);
             string[] target = new string[a.Length - 1];
             Array.Copy(a, 1, target, 0, target.Length);
-            return RequestGive(dir, LoadConfig(dir), target, now);
+            return RequestGive(dir, cfg, target, now);
+        }
+
+        static void LearnPeerAddress(string dir, Config cfg, string sshConnection)
+        {
+            try { PeerAddress.Learn(System.IO.Path.Combine(dir, SshRelay.PeerAddressFile), cfg.PeerHost, sshConnection); }
+            catch (Exception) { }
         }
 
         public static int Run(string[] args, string dir)
@@ -151,7 +167,8 @@ namespace ScreenSwitch
                         return RequestGive(dir, LoadConfig(dir), target, StateFile.Now());
                     }
                 case "ssh-gate":
-                    return SshGate(Environment.GetEnvironmentVariable("SSH_ORIGINAL_COMMAND"), dir, StateFile.Now());
+                    return SshGate(Environment.GetEnvironmentVariable("SSH_ORIGINAL_COMMAND"), dir, StateFile.Now(),
+                        Environment.GetEnvironmentVariable("SSH_CONNECTION"));
                 case "setup":
                     {
                         // 设置问答（设计文档第 9 节）：setup 走全部步骤，setup devices 只改设备列表
